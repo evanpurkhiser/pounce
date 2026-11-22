@@ -1,6 +1,7 @@
 import {Combobox} from '@base-ui/react/combobox';
 import {Dialog} from '@base-ui/react/dialog';
 import {Command} from 'cmdk';
+import type {LucideIcon} from 'lucide-react';
 import {useLayoutEffect, useRef, useState, type ReactNode} from 'react';
 import {rank, type Searchable} from './search';
 
@@ -31,7 +32,7 @@ export function useInitialFocus<T extends HTMLElement>(select = false) {
   return ref;
 }
 
-export type CommandItem = Searchable & {id: string; group: string; shortcut?: string; invoke: () => void};
+export type CommandItem = Searchable & {id: string; group: string; shortcut?: string; detail?: string; icon?: LucideIcon; invoke: () => void};
 
 export function CommandList({items, nested}: {items: CommandItem[]; nested?: (query: string) => CommandItem[]}) {
   const [query, setQuery] = useState('');
@@ -39,13 +40,16 @@ export function CommandList({items, nested}: {items: CommandItem[]; nested?: (qu
   const results = [...(nested?.(query) ?? []), ...rank(items, query)];
   const groups = Map.groupBy(results, item => item.group);
 
-  return <Command label="Transaction commands" shouldFilter={false} vimBindings={false} loop>
+  return <Command className="command-palette" label="Transaction commands" shouldFilter={false} vimBindings={false} loop>
     <Command.Input ref={input} value={query} onValueChange={setQuery} placeholder="Type a command…" className="search-input" />
     <Command.List className="choice-list">
       <Command.Empty className="empty">No matching commands.</Command.Empty>
       {[...groups].map(([group, commands]) => <Command.Group key={group} heading={group}>
         {commands.map(item => <Command.Item key={item.id} value={item.id} onSelect={item.invoke} className="choice">
-          <span>{item.label}</span>{item.shortcut && <kbd>{item.shortcut}</kbd>}
+          {item.icon && <item.icon className="command-icon action-icon" aria-hidden />}
+          <span className="command-label">{item.label}</span>
+          {item.detail && <small className="command-detail">{item.detail}</small>}
+          {item.shortcut && <kbd>{item.shortcut}</kbd>}
         </Command.Item>)}
       </Command.Group>)}
     </Command.List>

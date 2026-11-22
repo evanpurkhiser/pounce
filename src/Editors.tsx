@@ -2,44 +2,63 @@ import {Autocomplete} from '@base-ui/react/autocomplete';
 import {Tabs} from '@base-ui/react/tabs';
 import {parseDate, type CalendarDate} from '@internationalized/date';
 import {Button, Calendar, CalendarCell, CalendarGrid, DateInput, DatePicker, DateSegment, Dialog, Group, Heading, Label, Popover} from 'react-aria-components';
-import {useState} from 'react';
+import {useState, type FocusEvent, type KeyboardEvent} from 'react';
 import {type Choice, type Range, type Row} from './api';
 import {Picker, useInitialFocus} from './Palette';
 import {rank} from './search';
+
+function editorBindings(cancel?: () => void, leave?: () => void) {
+  return {
+    onBlurCapture: leave && ((event: FocusEvent<HTMLFormElement>) => {
+      const editor = event.currentTarget;
+      if (!editor.contains(event.relatedTarget)) {
+        queueMicrotask(() => {
+          if (editor.isConnected && !editor.contains(document.activeElement)) leave();
+        });
+      }
+    }),
+    onKeyDownCapture: cancel && ((event: KeyboardEvent<HTMLFormElement>) => {
+      if (event.key === 'Escape' && !event.nativeEvent.isComposing) {
+        event.preventDefault();
+        event.stopPropagation();
+        cancel();
+      }
+    }),
+  };
+}
 
 export function PayeeEditor({value, payees, apply, cancel, onLeave}: {
   value: string; payees: string[]; apply: (value: string) => void; cancel: () => void; onLeave?: () => void;
 }) {
   const [draft, setDraft] = useState(value);
-  const ref = useInitialFocus<HTMLInputElement>(true);
+  const [showSuggestions, setShowSuggestions] = useState(true);
+  const input = useInitialFocus<HTMLInputElement>(true);
   const suggestions = rank(payees.map(label => ({label})), draft).slice(0, 12).map(item => item.label);
 
-  return <form className="editor payee-editor" onSubmit={event => {
+  return <form className="editor payee-editor" {...editorBindings(cancel, onLeave)} onSubmit={event => {
     event.preventDefault();
-    const name = ref.current?.value.trim();
+    const name = draft.trim();
     if (name) apply(name);
-  }} onBlurCapture={onLeave && (event => {
-    const editor = event.currentTarget;
-    if (!editor.contains(event.relatedTarget)) {
-      queueMicrotask(() => {
-        if (editor.isConnected && !editor.contains(document.activeElement)) onLeave();
-      });
-    }
-  })} onKeyDownCapture={event => {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      event.stopPropagation();
-      cancel();
-    }
   }}>
-    <Autocomplete.Root inline open items={payees} filteredItems={suggestions} value={draft} onValueChange={setDraft}>
+    <Autocomplete.Root open={showSuggestions && suggestions.length > 0} onOpenChange={setShowSuggestions}
+      items={payees} filteredItems={suggestions} value={draft} onValueChange={(name, event) => {
+        setDraft(name);
+        setShowSuggestions(true);
+        if (event.reason === 'item-press') apply(name);
+      }}>
       <div className="controls">
-        <Autocomplete.Input aria-label="Payee" ref={ref} />
+        <Autocomplete.Input aria-label="Payee" ref={input} />
         <button type="submit" disabled={!draft.trim()}>Save payee</button>
       </div>
-      {!!suggestions.length && <Autocomplete.List className="suggestions">
-        {(payee: string) => <Autocomplete.Item key={payee} value={payee} className="choice">{payee}</Autocomplete.Item>}
-      </Autocomplete.List>}
+      <Autocomplete.Portal>
+        <Autocomplete.Positioner align="start" sideOffset={4} className="payee-positioner">
+          <Autocomplete.Popup className="suggestions">
+            <Autocomplete.List>
+              {(payee: string) => <Autocomplete.Item key={payee} value={payee} className="choice">{payee}</Autocomplete.Item>}
+            </Autocomplete.List>
+          </Autocomplete.Popup>
+        </Autocomplete.Positioner>
+      </Autocomplete.Portal>
     </Autocomplete.Root>
   </form>;
 }
@@ -87,11 +106,14 @@ export function RangeEditor({range, apply}: {range: Range; apply: (range: Range)
   </form>;
 }
 
-export function NoteEditor({value, apply}: {value: string; apply: (value: string) => void}) {
+export function NoteEditor({value, apply, cancel, onLeave}: {
+  value: string; apply: (value: string) => void; cancel?: () => void; onLeave?: () => void;
+}) {
   const [draft, setDraft] = useState(value);
   const ref = useInitialFocus<HTMLTextAreaElement>();
-  return <form className="editor" onSubmit={event => { event.preventDefault(); if (draft.trim()) apply(draft.trim()); }}>
-    <label>Note<textarea ref={ref} rows={5} value={draft} onChange={event => setDraft(event.target.value)} /></label>
+  return <form className="editor note-editor" {...editorBindings(cancel, onLeave)}
+    onSubmit={event => { event.preventDefault(); if (draft.trim()) apply(draft.trim()); }}>
+    <label>{onLeave ? <span className="visually-hidden">Note</span> : 'Note'}<textarea ref={ref} rows={onLeave ? 2 : 5} value={draft} onChange={event => setDraft(event.target.value)} /></label>
     <div className="controls">
       <button type="submit" disabled={!draft.trim()}>Save note</button>
       <button type="button" onClick={() => apply('')}>Clear note</button>

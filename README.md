@@ -7,7 +7,7 @@ npm ci
 npm run dev
 ```
 
-To switch to live data, choose **Connect Lunch Money** and enter an API token for a Lunch Money budget. The frontend sends requests directly to the v2 API and holds the token in memory until disconnect or reload. Edits in a connected budget are saved to Lunch Money. Use a test budget when trying out the editing workflow.
+To switch to live data, choose **Connect Lunch Money** and enter an API token for a Lunch Money budget. The frontend sends requests directly to the v2 API and stores the token in this browser for the site so it can reconnect after reload. **Disconnect** clears the saved token. Edits in a connected budget are saved to Lunch Money. Use a test budget when trying out the editing workflow.
 
 Press **⌘K** or **Ctrl+K** for commands and **?** for shortcuts. Navigate with the arrow keys or **J/K**, select with **X** or **Shift+X**, and edit categories, dates, notes, payees, and tags with **C/D/N/P/T**. **R** toggles review for a focused eligible row. **⌘Z** and **⌘⇧Z** undo and redo within the current session.
 

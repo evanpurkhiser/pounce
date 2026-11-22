@@ -28,15 +28,80 @@ test('keyboard range shrinks to its anchor, reverses, and honors filtered select
   await expect(row(page, 4)).toHaveAttribute('aria-selected', 'true');
   await expect(row(page, 5)).toHaveAttribute('aria-selected', 'true');
   await page.keyboard.press('Control+a');
-  await expect(selection(page)).toHaveCount(8);
+  await expect(selection(page)).toHaveCount(12);
 
   await page.getByRole('button', {name: 'Commands'}).click();
   await dialog(page).getByRole('combobox').fill('filter resturaunts');
   await expect(dialog(page).getByRole('option', {name: 'Filter › Category › Dining out'})).toBeVisible();
   await page.keyboard.press('Enter');
-  await expect(selection(page)).toHaveCount(1);
+  await expect(selection(page)).toHaveCount(2);
   await page.getByRole('button', {name: 'Remove filter Dining out'}).click();
-  await expect(selection(page)).toHaveCount(1);
+  await expect(selection(page)).toHaveCount(2);
+});
+
+test('one selected row opens a searchable category dropdown at its cell', async ({page}) => {
+  await ready(page);
+  const selected = row(page, 1);
+  const category = selected.locator('[data-editor-cell=category]');
+  await selected.focus();
+  await page.keyboard.press('X');
+  await page.keyboard.press('J');
+  await page.keyboard.press('C');
+
+  const picker = page.getByRole('dialog', {name: 'Change category'});
+  const search = picker.getByRole('combobox', {name: 'Search categories'});
+  await expect(search).toBeFocused();
+  await expect(category.getByRole('button')).toHaveAttribute('aria-expanded', 'true');
+  await expect(picker).toBeVisible();
+  const anchor = (await category.boundingBox())!;
+  const popup = (await picker.boundingBox())!;
+  expect(Math.abs(popup.x - anchor.x)).toBeLessThan(2);
+  expect(Math.abs(popup.y - (anchor.y + anchor.height))).toBeLessThan(8);
+
+  await page.keyboard.press('Escape');
+  await expect(picker).toBeHidden();
+  await expect(selected).toBeFocused();
+  await expect(selected).toHaveAttribute('aria-selected', 'true');
+
+  await category.getByRole('button').click();
+  await expect(search).toBeFocused();
+  for (const prefix of ['re', 'res']) {
+    await search.fill(prefix);
+    await expect(picker.getByRole('option')).toHaveText(['□Dining out']);
+  }
+  await search.fill('resturaunts');
+  await page.keyboard.press('Enter');
+  await expect(picker).toBeHidden();
+  await expect(category).toHaveText('Dining out');
+  await expect(selected).toBeFocused();
+  await expect(row(page, 2).locator('[data-editor-cell=category]')).toHaveText('Groceries');
+});
+
+test('date and tags open at their cells for a single row', async ({page}) => {
+  await ready(page);
+  const target = row(page, 1);
+  await target.focus();
+
+  for (const [key, field, title] of [
+    ['D', 'date', 'Set transaction date'],
+    ['T', 'tags', 'Set tags'],
+  ]) {
+    await page.keyboard.press(key);
+    const picker = page.getByRole('dialog', {name: title, exact: true});
+    const cell = target.locator('[data-editor-cell="' + field + '"]');
+    await expect(cell.getByRole('button')).toHaveAttribute('aria-expanded', 'true');
+    await expect(picker).toBeVisible();
+    await expect(picker.locator(':focus')).toHaveCount(1);
+
+    const anchor = (await cell.boundingBox())!;
+    const popup = (await picker.boundingBox())!;
+    expect(Math.abs(popup.x - anchor.x)).toBeLessThan(2);
+    expect(Math.abs(popup.y - (anchor.y + anchor.height))).toBeLessThan(8);
+
+    await page.keyboard.press('Escape');
+    await expect(picker).toBeHidden();
+    await expect(target).toBeFocused();
+  }
 });
 
 test('bulk category replaces mixed values with one choice and supports undo and redo', async ({page}) => {
@@ -51,7 +116,7 @@ test('bulk category replaces mixed values with one choice and supports undo and 
   await pickCategory(page, 'resturaunts');
   await expect(row(page, 1)).toContainText('Dining out');
   await expect(row(page, 2)).toContainText('Dining out');
-  await expect(row(page, 2)).toHaveAttribute('data-active', 'true');
+  await expect(row(page, 2)).toBeFocused();
   await expect(page.getByRole('button', {name: 'Undo', exact: true})).toBeEnabled();
   await page.keyboard.press('Control+z');
   await expect(row(page, 1)).toContainText('Uncategorized');
@@ -90,12 +155,19 @@ test('single payee accepts a new value, notes cancel, and bulk shortcuts open di
   await expect(row(page, 1)).toContainText('New merchant');
 
   await page.keyboard.press('N');
-  const note = dialog(page).getByRole('textbox', {name: 'Note'});
+  const note = row(page, 1).locator('[data-editor-cell=note]').getByRole('textbox', {name: 'Note'});
   await expect(note).toBeFocused();
   await note.fill('discard this');
   await page.keyboard.press('Escape');
-  await expect(dialog(page)).toHaveCount(0);
-  await expect(row(page, 1)).toHaveAttribute('data-active', 'true');
+  await expect(note).toHaveCount(0);
+  await expect(row(page, 1)).toBeFocused();
+
+  await page.keyboard.press('N');
+  await expect(note).toHaveValue('');
+  await note.fill('Saved in the grid');
+  await row(page, 1).getByRole('button', {name: 'Save note'}).click();
+  await expect(row(page, 1).locator('[data-editor-cell=note]')).toHaveText('Saved in the grid');
+  await expect(row(page, 1)).toBeFocused();
 
   await page.keyboard.press('X');
   await page.keyboard.press('J');
@@ -112,10 +184,12 @@ test('single payee accepts a new value, notes cancel, and bulk shortcuts open di
 
 test('month sequences and review advance work with row focus', async ({page}) => {
   await ready(page);
+  await page.getByRole('button', {name: 'Filter', exact: true}).click();
+  await dialog(page).getByRole('option', {name: 'Unreviewed', exact: true}).click();
   await row(page, 1).focus();
   await page.keyboard.press('R');
   await expect(row(page, 1)).toHaveCount(0);
-  await expect(row(page, 2)).toHaveAttribute('data-active', 'true');
+  await expect(row(page, 2)).toBeFocused();
   await page.keyboard.press('G');
   await page.keyboard.press('P');
   await expect(row(page, 101)).toBeVisible();
@@ -199,14 +273,14 @@ test('column headers and the sort submenu share order and preserve selection', a
   await expect(displayed.first()).toHaveAttribute('data-row-id', '1');
   await amount.click();
   await expect(amount).toHaveAttribute('aria-sort', 'descending');
-  await expect(displayed.first()).toHaveAttribute('data-row-id', '8');
+  await expect(displayed.first()).toHaveAttribute('data-row-id', '12');
 
   await row(page, 1).focus();
   await page.keyboard.press('A');
   await expect(dialog(page)).toHaveAccessibleName('Sort by');
   await dialog(page).getByRole('option', {name: 'Date · Oldest first'}).click();
   await expect(date).toHaveAttribute('aria-sort', 'ascending');
-  await expect(displayed.first()).toHaveAttribute('data-row-id', '8');
+  await expect(displayed.first()).toHaveAttribute('data-row-id', '12');
   await expect(row(page, 1)).toBeFocused();
   await expect(row(page, 1)).toHaveAttribute('aria-selected', 'true');
 
@@ -215,7 +289,6 @@ test('column headers and the sort submenu share order and preserve selection', a
   await dialog(page).getByRole('option', {name: 'Date · Newest first'}).click();
   await expect(date).toHaveAttribute('aria-sort', 'descending');
   await expect(displayed.first()).toHaveAttribute('data-row-id', '1');
-  await page.getByRole('button', {name: 'Remove filter Unreviewed'}).click();
   await expect(row(page, 9).getByRole('img', {name: 'Reviewed', exact: true})).toHaveAttribute('data-reviewed', 'true');
   await review.click();
   await expect(review).toHaveAttribute('aria-sort', 'ascending');
@@ -249,4 +322,65 @@ test('leaving the inline payee editor discards the draft and releases shortcuts'
   await row(page, 1).focus();
   await page.keyboard.press('J');
   await expect(row(page, 2)).toBeFocused();
+});
+
+test('all rows are visible on arrival and J and K enter the grid', async ({page}) => {
+  await ready(page);
+  await expect(row(page, 12)).toBeVisible();
+  await page.keyboard.press('J');
+  await expect(row(page, 1)).toBeFocused();
+  await page.reload();
+  await expect(row(page, 12)).toBeVisible();
+  await page.keyboard.press('K');
+  await expect(row(page, 12)).toBeFocused();
+});
+
+test('payee suggestions float below the input and can save a known payee', async ({page}) => {
+  await ready(page);
+  await row(page, 1).focus();
+  await page.keyboard.press('P');
+  const input = row(page, 1).getByRole('combobox', {name: 'Payee'});
+  await input.fill('Superior');
+  const suggestion = page.getByRole('option', {name: 'Superiority Burger'});
+  await expect(suggestion).toBeVisible();
+  await expect(row(page, 1).getByRole('option')).toHaveCount(0);
+  const inputBounds = (await input.boundingBox())!;
+  const listBounds = (await page.getByRole('listbox').locator('..').boundingBox())!;
+  expect(Math.abs(listBounds.x - inputBounds.x)).toBeLessThan(2);
+  expect(listBounds.y).toBeGreaterThan(inputBounds.y + inputBounds.height);
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await expect(input).toHaveCount(0);
+  await expect(row(page, 1)).toContainText('Superiority Burger');
+  await expect(row(page, 1)).toBeFocused();
+});
+
+test('bulk commands align counts and R reviews the selection with confirmation', async ({page}) => {
+  await ready(page);
+  await page.keyboard.press('J');
+  await page.keyboard.press('Shift+J');
+  const toolbar = page.getByRole('button', {name: 'Search transactions'}).locator('..');
+  await expect(toolbar.getByRole('status')).toHaveText('2 transactions selected');
+  await page.keyboard.press('Control+k');
+  const category = dialog(page).getByRole('option', {name: /Change category/}).getByText('2 transactions');
+  const payee = dialog(page).getByRole('option', {name: /Set payee/}).getByText('2 transactions');
+  await expect(category).toBeVisible();
+  expect((await category.boundingBox())?.x).toBe((await payee.boundingBox())?.x);
+  await expect(dialog(page).getByRole('option', {name: /Mark 2 reviewed/}).getByText('R', {exact: true})).toBeVisible();
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('R');
+  await expect(row(page, 1).getByRole('img', {name: 'Reviewed', exact: true})).toBeVisible();
+  await expect(row(page, 2).getByRole('img', {name: 'Reviewed', exact: true})).toBeVisible();
+  await expect(page.getByText('Marked reviewed', {exact: true})).toBeVisible();
+});
+
+test('budget category groups expand and collapse independently', async ({page}) => {
+  await ready(page);
+  const budget = page.getByRole('complementary', {name: 'Monthly budget'});
+  const food = budget.locator('details').filter({hasText: 'Food'});
+  await expect(food.getByRole('meter', {name: 'Food budget used'})).toHaveAttribute('max', '500');
+  await expect(food.getByRole('meter', {name: 'Groceries budget used'})).toBeVisible();
+  await food.locator('summary').click();
+  await expect(food.getByRole('meter', {name: 'Groceries budget used'})).toBeHidden();
+  await expect(budget.getByRole('meter', {name: 'Shopping budget used'})).toBeVisible();
 });

@@ -1,6 +1,6 @@
 import {createCollection, createTransaction, localOnlyCollectionOptions} from '@tanstack/db';
 import {QueryClient} from '@tanstack/react-query';
-import {inRange, monthRange, type DataSource, type Patch, type Range, type Row, type Update} from './api';
+import {inRange, listTransactions, monthRange, type DataSource, type Patch, type Range, type Row, type TransactionPage, type Update} from './api';
 
 type Change = {id: number; before: Patch; after: Patch};
 export type Edit = {label: string; changes: Change[]};
@@ -31,20 +31,25 @@ export function createSession(source: DataSource) {
   let writeVersion = 0;
   let pending: Promise<unknown> | undefined;
 
-  async function load(range: Range, signal: AbortSignal) {
+  async function loadPage(range: Range, offset: number, signal: AbortSignal) {
     for (;;) {
       await pending?.catch(() => undefined);
-      const version = writeVersion;
-      const fetched = await source.list(range, signal);
       signal.throwIfAborted();
-      if (version !== writeVersion) continue;
-
-      const fresh = new Map(fetched.map(row => [row.id, row]));
-      const removed = [...rows.values()].filter(row => inRange(row.date, range) && !fresh.has(row.id));
-      if (removed.length) rows.delete(removed.map(row => row.id));
-      for (const row of fetched) mergeRow(row);
-      return fetched.length;
+      const version = writeVersion;
+      const page = await source.transactionsPage(range, offset, signal);
+      signal.throwIfAborted();
+      if (version === writeVersion) return {...page, version};
     }
+  }
+
+  function applyPages(range: Range, pages: (TransactionPage & {version: number})[]) {
+    // Partial or stale snapshots cannot delete rows or overwrite a local edit.
+    if (pages.some(page => page.version !== writeVersion)) return false;
+    const fresh = new Map(pages.flatMap(page => page.rows.map(row => [row.id, row] as const)));
+    const removed = [...rows.values()].filter(row => inRange(row.date, range) && !fresh.has(row.id));
+    if (removed.length) rows.delete(removed.map(row => row.id));
+    for (const row of fresh.values()) mergeRow(row);
+    return true;
   }
 
   function mergeRow(row: Row) {
@@ -60,7 +65,7 @@ export function createSession(source: DataSource) {
         return date ? [date.slice(0, 7)] : [];
       }));
       for (const month of months) {
-        for (const row of await source.list(monthRange(month))) result.set(row.id, row);
+        for (const row of await listTransactions(source, monthRange(month))) result.set(row.id, row);
       }
     }
     const missing = ids.filter(id => !result.has(id));
@@ -182,7 +187,7 @@ export function createSession(source: DataSource) {
     });
   }
 
-  return {source, query, rows, load, write, replay};
+  return {source, query, rows, loadPage, applyPages, write, replay};
 }
 
 export type Session = ReturnType<typeof createSession>;

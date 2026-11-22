@@ -31,13 +31,17 @@ The grid shows the selection checkbox, Date, Category, Payee, Amount, Note, Tags
 
 Click a data column header to sort and click it again to reverse the direction. **Sort by** in Command K lists both directions for each column, with `A` opening it directly. The default is newest first, and search results default to relevance. An explicit column sort applies across months and search results. **Search relevance** in the sort menu restores relevance ordering while searching. Amounts sort in the budget currency. Sorting preserves selected row IDs and keyboard range selection follows the new order.
 
+## Monthly budget
+
+The budget panel shows category groups with expandable child rows. Group rows use Lunch Money’s group totals when available and otherwise roll up their children. Monthly totals count each group once.
+
 ## Grid focus and selection
 
-**Row focus** identifies the active transaction. **Field focus** belongs to that transaction's editor or picker. Moving focus leaves **selection** intact. A filter change deselects rows it hides. Rows still visible stay selected, and clearing the filter leaves previously hidden rows unselected.
+Transactions starts with all review statuses visible. **Row focus** identifies the active transaction. **Field focus** belongs to that transaction's editor or picker. Moving focus leaves **selection** intact. A filter change deselects rows it hides. Rows still visible stay selected, and clearing the filter leaves previously hidden rows unselected.
 
 | Key | Action |
 | --- | --- |
-| `J` / `K` or `↓` / `↑` | Move row focus down / up. |
+| `J` / `K` or `↓` / `↑` | Move row focus down / up. From outside the grid, `J` focuses the first visible row and `K` focuses the last. |
 | `X` | Toggle the focused row's selection and set the anchor. A row checkbox also sets the anchor. |
 | `⌘A` / `Ctrl+A` | With grid focus, select all rows in the current filtered view, including rows outside the viewport. Keep focus on the active row. In a text input, select its text. |
 | `Shift+X` | Select the visible range from the anchor through the focused row without moving focus. |
@@ -68,18 +72,18 @@ Closing the palette or editor restores focus to the invoking control or grid cel
 
 | Action | Direct key | One focused or selected transaction | Multiple selected transactions |
 | --- | --- | --- | --- |
-| **Change category…** | `C` | Open the category picker. | Open the category picker in the palette and apply one category to all targets. |
-| **Edit payee…** | `P` | Focus the inline editor and select all the payee text. Save or Escape returns focus to the row. Clicking or tabbing away discards the draft and leaves focus at its destination. | Open **Set payee…** in the palette and apply one replacement payee. |
-| **Set transaction date…** | `D` | Open the row's date picker at the existing date. | Open the date picker in the palette. Show the chosen date and affected count before applying. |
-| **Set note…** | `N` | Open the Notes tab and focus the existing note for editing or clearing. | Open **Replace notes…** in the palette. Start blank if notes differ. Require an explicit clear action to remove existing notes. |
-| **Set tags…** | `T` | Open the searchable tag multi-select. | Open the same picker in the palette with mixed tag states. |
-| **Mark reviewed** / **Mark unreviewed** | `R` | The palette shows the action that changes the target's status. The direct key toggles the focused row. | Show each action that changes eligible rows in the selection. Use the affected counts, such as **Mark 2 reviewed** and **Mark 1 unreviewed**. |
+| **Change category…** | `C` | Open a searchable dropdown at the target row’s Category cell. | Open the category picker in the palette and apply one category to all targets. |
+| **Edit payee…** | `P` | Select the payee text in the cell and show a floating list of matching payees from loaded transactions. Choose a suggestion or save a new name. | Open **Set payee…** in the palette and apply one replacement payee. |
+| **Set transaction date…** | `D` | Open the date editor at the target row’s Date cell, with the existing date. | Open the date picker in the palette. Show the chosen date and affected count before applying. |
+| **Set note…** | `N` | Edit the note directly in the Note cell. | Open **Replace notes…** in the palette. Start blank if notes differ. Require an explicit clear action to remove existing notes. |
+| **Set tags…** | `T` | Open a searchable tag multi-select at the target row’s Tags cell. | Open the same picker in the palette with mixed tag states. |
+| **Mark reviewed** / **Mark unreviewed** | `R` | The palette shows the action that changes the target's status. The direct key toggles the target row. | Show each action that changes eligible rows in the selection. Show affected counts. `R` marks eligible unreviewed rows reviewed first, or marks eligible reviewed rows unreviewed if all are reviewed. |
 
-A bulk shortcut opens its editor directly, with focus in the first input. `R` is the review shortcut. Bulk review uses the explicit palette actions.
+Clicking a field or using its direct shortcut opens the single-row editor. Save and Escape return focus to the target row. Leaving the inline payee or note editor discards the draft. Bulk edit shortcuts focus the first input in the palette. The palette aligns affected transaction counts in a separate column and shows the `R` hint beside its current review action.
 
 ### Searchable pickers
 
-Typing filters choices and arrow keys move the highlight. The picker retains staged values as its query changes.
+One- to three-character terms match word prefixes. Longer terms also match typos. Arrow keys move the highlight. The picker retains staged values as its query changes.
 
 - **Category** uses single-select. Show the category shared by all targets as checked and categories used by some targets as mixed, with a count such as **2 of 4**. Enter sets the highlighted category on every target and closes the picker. **Uncategorized** clears the category.
 - **Tags** use multi-select. Show checked for all targets, unchecked for none, and mixed with a count for some. Enter toggles the highlighted tag and keeps the picker open. Activating a mixed or unchecked tag stages adding it to all targets. Activating a checked tag stages removing it from all. The user can toggle a staged change or reset that tag to its original distribution. **Apply tags** saves the staged changes and preserves untouched tag memberships. Escape discards the draft.
@@ -88,12 +92,12 @@ Typing filters choices and arrow keys move the highlight. The picker retains sta
 
 **⌘Z** or **Ctrl+Z** undoes the last transaction edit. **⌘⇧Z** or **Ctrl+Shift+Z** redoes it. While editing text, those shortcuts operate on the text. Transaction history stays available across month changes in the same budget.
 
-Each successful action is one history entry, including a bulk edit. Keep the before and after values for the changed fields of each transaction. Undo writes back the before values and redo reapplies the after values. Refresh affected rows and budget summaries after a successful write. A new successful edit clears the redo history. If a write fails or the affected fields changed elsewhere, identify the transactions that need attention and retain the history needed to retry.
+A toast confirms successful writes, undo, and redo. Each successful action is one history entry, including a bulk edit. Keep the before and after values for the changed fields of each transaction. Undo writes back the before values and redo reapplies the after values. Refresh affected rows and budget summaries after a successful write. A new successful edit clears the redo history. If a write fails or the affected fields changed elsewhere, identify the transactions that need attention and retain the history needed to retry.
 
 ## Open UX decisions
 
-- **Starting view and review loop.** Decide whether opening Transactions starts in Unreviewed, All, or the last-used view. Set the default focus and what a successful review does when the row stays visible. The current rule covers edits that take the focused row out of the view.
-- **Row layout and editing.** Choose where transaction details and the Notes editor appear and the pointer affordances for opening editors. Specify save behavior for date and note edits, including what happens when the user clicks away.
+- **Review loop.** Decide where focus should move after reviewing a transaction that stays visible.
+- **Transaction details.** Define which fields appear in the details view and which can be edited there.
 - **Selection controls and navigation bounds.** Define the header checkbox scope and what happens at the first or last visible row during navigation.
 - **Feedback and recovery.** Design loading, empty, saving, success, and error states. Decide how to present ineligible targets and partial success across several API writes. Decide whether history survives a reload and how conflicts appear in the UI.
 - **Search and budget context.** Define the wider-date search picker, how similar search interacts with active filters, and what the budget panel shows when a calendar month overlaps different budget periods.

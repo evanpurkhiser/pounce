@@ -27,20 +27,26 @@ h2 { font-size: 1.1rem; }
 .layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(15rem, 19rem); gap: 1rem; padding: 1rem; }
 .workspace, .budget { min-width: 0; }
 .controls { margin-bottom: .55rem; }
+.action-icon { width: 1em; height: 1em; flex: none; vertical-align: -.12em; }
+:is(.top, .transaction-toolbar) button { display: inline-flex; align-items: center; gap: .35rem; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .chips button { background: #eaf0fc; }
 .chips:empty { display: none; }
-.selection-toolbar { border: 1px solid #abc2ec; background: #eaf0fc; padding: .35rem .5rem; }
-.selection-toolbar span, .status span { margin-right: auto; }
+.selection-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; margin-inline-start: auto; }
+.selection-toolbar [role=status] { color: #42516a; }
+.status span { margin-right: auto; }
 .status { margin-top: .55rem; min-height: 2rem; }
 .grid-scroll { overflow: auto; background: white; border: 1px solid var(--line); }
 .grid { width: 100%; min-width: 760px; border-spacing: 0; text-align: left; }
 .grid :is(th, td) { padding: .38rem .5rem; border-bottom: 1px solid #e7e9ec; }
 .grid th { background: #eff1f3; white-space: nowrap; }
 .grid tr[data-selected] td { background: var(--selected); }
-.grid tr:is([data-active], :focus-within) { outline: 2px solid var(--focus); outline-offset: -2px; }
+.grid tr:focus-within { outline: 2px solid var(--focus); outline-offset: -2px; }
 .grid [data-focus-visible] { outline-offset: -2px; }
 .grid [data-empty] > td { padding: .75rem; }
 .grid td:first-child, .grid th:first-child { width: 2rem; }
+/* The auto table layout expands the non-wrapping cells to their intrinsic width. */
+.grid .date-cell { width: 1px; white-space: nowrap; }
 .grid .react-aria-Checkbox { position: relative; display: grid; place-items: center; width: 1.05rem; height: 1.05rem; border: 1px solid #7d8793; border-radius: 3px; background: white; cursor: pointer; }
 .grid .react-aria-Checkbox span { display: none; }
 .grid .react-aria-Checkbox[data-selected] span { display: inline; color: #fff; }
@@ -48,6 +54,7 @@ h2 { font-size: 1.1rem; }
 .grid .react-aria-Checkbox[data-indeterminate]::after { content: "−"; color: white; position: absolute; }
 .amount { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .cell-action { padding: .13rem .2rem; text-align: left; border-color: transparent; background: transparent; }
+.cell-action[aria-expanded=true] { outline: 2px solid var(--focus); }
 .cell-action:hover { text-decoration: underline; }
 .payee { display: flex; align-items: center; gap: .25rem; }
 .payee > :first-child { font-weight: 650; }
@@ -62,17 +69,32 @@ h2 { font-size: 1.1rem; }
 .review-indicator { vertical-align: middle; display: inline-grid; place-items: center; width: 1.2rem; height: 1.2rem; border-radius: 50%; background: #687482; color: white; font-size: .85rem; }
 .review-indicator[data-reviewed] { background: #218044; }
 .budget { padding: .8rem; border: 1px solid var(--line); background: white; align-self: start; }
+.budget-total { font-size: .8rem; font-variant-numeric: tabular-nums; }
 .budget-item { margin-top: .65rem; }
-.budget-item div { display: flex; justify-content: space-between; gap: .3rem; }
-.budget-item span { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.budget-list { list-style: none; padding: 0; margin: 0; }
+.budget-children { margin-left: .45rem; border-left: 1px solid var(--line); padding-left: .7rem; }
+.budget-item summary { cursor: pointer; }
+.budget-item summary > .budget-amount { display: inline-flex; width: calc(100% - 1.1rem); font-weight: 600; }
+.budget-item .budget-amount { display: flex; align-items: baseline; justify-content: space-between; gap: .3rem; }
+.budget-amount > span { font-size: .72rem; font-weight: 400; font-variant-numeric: tabular-nums; white-space: nowrap; }
 meter { width: 100%; margin-top: .2rem; }
 
 .backdrop { position: fixed; inset: 0; background: #10182866; z-index: 4; }
 .modal { position: fixed; top: 12vh; left: 50%; transform: translateX(-50%); width: min(34rem, calc(100vw - 2rem)); max-height: 80vh; overflow: auto; z-index: 5; background: white; border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 .5rem 2rem #10182840; }
+.cell-editor-positioner { z-index: 6; }
+.cell-editor-popup { width: min(19rem, calc(100vw - 1rem)); background: white; border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 .35rem 1rem #10182830; }
+.cell-editor-popup .choice-list { max-height: min(15rem, max(5rem, calc(var(--available-height) - 3rem))); }
 .modal-heading { padding: .6rem .75rem; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: .5rem; }
 .modal-heading h2 { margin: 0; flex: 1; }
 .search-input { width: calc(100% - 1.5rem); margin: .7rem .75rem .25rem; }
 .choice-list { padding: .4rem .6rem; max-height: 45vh; overflow: auto; }
+.command-palette [cmdk-list-sizer] { display: grid; grid-template-columns: 1.45rem minmax(0, 1fr) auto auto; column-gap: .5rem; }
+.command-palette :is([cmdk-group], [cmdk-group-items], [cmdk-item]) { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; }
+.command-palette :is([cmdk-group-heading], [cmdk-empty]) { grid-column: 1 / -1; }
+.command-icon { grid-column: 1; }
+.command-label { grid-column: 2; }
+.command-detail { grid-column: 3; white-space: nowrap; }
+.command-palette [cmdk-item] kbd { grid-column: 4; }
 [cmdk-group-heading] { padding: .3rem .45rem; color: #4b5563; font-size: .85rem; }
 .choice { padding: .38rem .45rem; display: flex; align-items: center; gap: .5rem; border: 1px solid transparent; border-radius: 4px; cursor: default; }
 .choice:is([data-highlighted], [aria-selected=true][cmdk-item]) { border-color: var(--focus); background: var(--selected); }
@@ -83,7 +105,10 @@ meter { width: 100%; margin-top: .2rem; }
 .editor { display: grid; justify-items: start; gap: .6rem; }
 .grid .editor { padding: 0; }
 .payee-editor > .controls { margin: 0; }
-.payee-editor .suggestions { max-height: 9rem; overflow: auto; }
+.payee-positioner { z-index: 8; }
+.payee-positioner .suggestions { min-width: var(--anchor-width); max-width: min(24rem, calc(100vw - 1rem)); max-height: min(12rem, var(--available-height)); overflow: auto; }
+.grid .note-editor { min-width: 12rem; }
+.grid .note-editor .controls { margin: 0; }
 .grid .editor input { min-width: 8rem; width: 12rem; }
 .editor label:has(:is(input:not([type=checkbox]), textarea)) { display: grid; width: 100%; gap: .25rem; }
 .editor textarea { resize: vertical; width: 100%; }

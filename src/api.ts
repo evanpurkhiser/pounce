@@ -20,16 +20,32 @@ export const inRange = (date: string, range: Range) => date >= range.start && da
 export const monthLabel = (month: string) => new Date(month + '-01T00:00:00Z').toLocaleDateString(undefined, {
   timeZone: 'UTC', month: 'long', year: 'numeric',
 });
-export function money(amount: number, currency: string) {
-  return new Intl.NumberFormat(undefined, {style: 'currency', currency: currency.toUpperCase(), currencyDisplay: 'narrowSymbol'}).format(amount);
+export function money(amount: number, currency: string, fractionDigits?: number) {
+  return new Intl.NumberFormat(undefined, {
+    style: 'currency', currency: currency.toUpperCase(), currencyDisplay: 'narrowSymbol',
+    minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits,
+  }).format(amount);
 }
 export const accountKey = (row: Row) => row.manual_account_id ? 'manual:' + row.manual_account_id : row.plaid_account_id ? 'plaid:' + row.plaid_account_id : 'cash';
 export const canEdit = (row: Row) => !row.is_split_parent && row.split_parent_id == null && !row.is_group_parent && row.group_parent_id == null;
 export const canReview = (row: Row) => canEdit(row) && !row.is_pending && row.status !== 'delete_pending';
 
+export type TransactionPage = {rows: Row[]; nextOffset?: number};
+
+export async function listTransactions(source: DataSource, range: Range, signal?: AbortSignal) {
+  const rows = new Map<number, Row>();
+  let offset: number | undefined = 0;
+  while (offset !== undefined) {
+    const page = await source.transactionsPage(range, offset, signal);
+    for (const row of page.rows) rows.set(row.id, row);
+    offset = page.nextOffset;
+  }
+  return [...rows.values()];
+}
+
 export interface DataSource {
   metadata(signal?: AbortSignal): Promise<Metadata>;
-  list(range: Range, signal?: AbortSignal): Promise<Row[]>;
+  transactionsPage(range: Range, offset: number, signal?: AbortSignal): Promise<TransactionPage>;
   get(id: number): Promise<Row>;
   summary(range: Range, signal?: AbortSignal): Promise<Summary>;
   update(items: (Update & {addTags?: number[]})[]): Promise<Row[]>;
@@ -92,16 +108,12 @@ export function liveSource(token: string): DataSource {
         ],
       };
     },
-    async list(range, signal) {
+    async transactionsPage(range, offset, signal) {
       const limit = 1000;
-      const rows = new Map<number, Row>();
-      for (let offset = 0; ; offset += limit) {
-        const query = new URLSearchParams({start_date: range.start, end_date: range.end, include_pending: 'true', limit: String(limit), offset: String(offset)});
-        const result = await request<{transactions: Row[]; has_more: boolean}>('/transactions?' + query, {signal});
-        for (const row of result.transactions) rows.set(row.id, row);
-        if (!result.has_more) return [...rows.values()];
-        if (!result.transactions.length) throw new Error('Lunch Money returned an empty page before the end of the date range.');
-      }
+      const query = new URLSearchParams({start_date: range.start, end_date: range.end, include_pending: 'true', limit: String(limit), offset: String(offset)});
+      const {transactions, has_more} = await request<{transactions: Row[]; has_more: boolean}>('/transactions?' + query, {signal});
+      if (has_more && !transactions.length) throw new Error('Lunch Money returned an empty page before the end of the date range.');
+      return {rows: transactions, nextOffset: has_more ? offset + limit : undefined};
     },
     get: id => request<Row>('/transactions/' + id),
     summary: (range, signal) => request<Summary>('/summary?' + new URLSearchParams({

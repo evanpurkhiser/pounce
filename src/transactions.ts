@@ -47,7 +47,7 @@ export function demoSource(): DataSource {
   );
   return {
     async metadata() { return metadata; },
-    async list(range) { return rows.filter(row => inRange(row.date, range)); },
+    async transactionsPage(range) { return {rows: rows.filter(row => inRange(row.date, range))}; },
     async get(id) {
       const row = rows.find(item => item.id === id);
       if (!row) throw new Error('Transaction ' + id + ' is missing.');

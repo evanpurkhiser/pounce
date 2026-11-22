@@ -1,19 +1,25 @@
+import {ArrowDownUp, CalendarDays, Check, ChevronLeft, ChevronRight, Circle, Command, Filter as FilterIcon, List, Redo2, Search, Undo2, X} from 'lucide-react';
+import {Toaster, toast} from 'sonner';
+import {Popover} from '@base-ui/react/popover';
 import {useLiveQuery} from '@tanstack/react-db';
 import {QueryClientProvider, useQuery} from '@tanstack/react-query';
 import {useHotkeys} from '@tanstack/react-hotkeys';
-import {useLayoutEffect, useMemo, useRef, useState} from 'react';
+import {useMemo, useRef, useState} from 'react';
 import type {SortDescriptor} from 'react-aria-components';
-import {accountKey, canEdit, canReview, currentMonth, inRange, liveSource, monthLabel, monthRange, shiftMonth, type Choice, type Patch, type Range, type Row} from './api';
+import {accountKey, canEdit, canReview, currentMonth, inRange, liveSource, monthLabel, monthRange, shiftMonth, type Choice, type Range, type Row} from './api';
 import {Budget} from './Budget';
 import {createSession, message, type Session} from './data';
-import {CategoryPicker, DateEditor, Details, NoteEditor, PayeeEditor, RangeEditor, TagPicker} from './Editors';
-import {Grid, type Field} from './Grid';
+import {Details, RangeEditor} from './Editors';
+import {Grid} from './Grid';
 import {CommandList, Modal, Picker, useInitialFocus, type CommandItem} from './Palette';
 import {rank} from './search';
-import {emptySelection, restrictSelection, selectedKeys, selectRange, toggleRow} from './selection';
 import {columns, defaultSort, sortTransactions} from './sorting';
+import {TransactionEditor, type RowPatch} from './TransactionEditor';
+import {canEditAny, cellEditorTriggerId, editActions, editTitle, isCellEditorField, reviewShortcut, reviewStatuses, reviewTargets, type CellEditorField, type Field, type ReviewStatus} from './transactionActions';
 import {demoSource} from './transactions';
 import {useEdits} from './useEdits';
+import {useTransactionGrid} from './useTransactionGrid';
+import {useTransactionPages} from './useTransactionPages';
 
 const facets = ['review', 'category', 'tag', 'account', 'posting'] as const;
 type Facet = typeof facets[number];
@@ -27,58 +33,68 @@ type Overlay =
 const facetLabels: Record<Facet, string> = {review: 'Review status', category: 'Category', tag: 'Tag', account: 'Account', posting: 'Posting state'};
 const reviews = [{id: 'reviewed', label: 'Reviewed'}, {id: 'unreviewed', label: 'Unreviewed'}, {id: '', label: 'Any review status'}];
 const posting = [{id: 'pending', label: 'Pending'}, {id: 'posted', label: 'Posted'}, {id: '', label: 'Any posting state'}];
-const fieldKeys = {category: 'C', payee: 'P', date: 'D', note: 'N', tags: 'T'} as const;
+const tableIcons: Record<string, CommandItem['icon']> = {
+  filter: FilterIcon, clear: X, sort: ArrowDownUp, search: Search,
+  previous: ChevronLeft, next: ChevronRight, month: CalendarDays, current: CalendarDays, undo: Undo2, redo: Redo2,
+};
 const countLabel = (count: number) => count + (count === 1 ? ' transaction' : ' transactions');
 
-function editTitle(field: Field, multiple: boolean) {
-  switch (field) {
-    case 'category': return 'Change category';
-    case 'payee': return multiple ? 'Set payee' : 'Edit payee';
-    case 'date': return 'Set transaction date';
-    case 'note': return multiple ? 'Replace notes' : 'Set note';
-    case 'tags': return 'Set tags';
+const tokenStorageKey = 'lunchline.lunchMoneyToken';
+
+function readToken() {
+  try {
+    return localStorage.getItem(tokenStorageKey) ?? undefined;
+  } catch {
+    return undefined;
   }
 }
 
-function commonValue<T>(items: T[], blank: T): T {
-  return items.length && items.every(item => item === items[0]) ? items[0] : blank;
+function createConnection(id: number, token?: string) {
+  return {session: createSession(token ? liveSource(token) : demoSource()), live: !!token, id};
 }
 
 export function App() {
-  const [connection, setConnection] = useState(() => ({session: createSession(demoSource()), live: false, id: 0}));
+  const [connection, setConnection] = useState(() => createConnection(0, readToken()));
+
   function connect(token?: string) {
-    setConnection(previous => ({session: createSession(token ? liveSource(token) : demoSource()), live: !!token, id: previous.id + 1}));
+    try {
+      if (token) localStorage.setItem(tokenStorageKey, token);
+      else localStorage.removeItem(tokenStorageKey);
+    } catch {
+      if (token) toast.warning('The browser could not save the key. This connection lasts until reload.');
+      else toast.warning('The browser could not clear the saved key.');
+    }
+
+    setConnection(previous => createConnection(previous.id + 1, token));
   }
 
   return <QueryClientProvider client={connection.session.query}>
     <Workspace key={connection.id} {...connection} connect={connect} />
+    <Toaster richColors position="bottom-right" />
   </QueryClientProvider>;
 }
 
 function Workspace({session, live, connect}: {session: Session; live: boolean; connect: (token?: string) => void}) {
   const [month, setMonth] = useState(currentMonth);
   const [customRange, setCustomRange] = useState<Range>();
-  const [filters, setFilters] = useState<Filters>({review: ['unreviewed']});
+  const [filters, setFilters] = useState<Filters>({});
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortDescriptor>();
   const gridSort = sort ?? (search ? undefined : defaultSort);
-  const [selection, setSelection] = useState(emptySelection);
-  const [active, setActive] = useState<number>();
-  const [gridActive, setGridActive] = useState(false);
   const [overlay, setOverlay] = useState<Overlay>();
-  const [inlinePayee, setInlinePayee] = useState<number>();
+  const [cellEditor, setCellEditor] = useState<{id: number; field: CellEditorField; anchor: HTMLElement}>();
+  const [cellEditorHandle] = useState(() => Popover.createHandle());
+  const [inlineEditor, setInlineEditor] = useState<{id: number; field: 'payee' | 'note'}>();
   const [letterKeys, setLetterKeys] = useState(true);
-  const grid = useRef<HTMLDivElement>(null);
   const commandButton = useRef<HTMLButtonElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
   const originRow = useRef<number | undefined>(undefined);
-  const oldOrder = useRef<number[]>([]);
   const edits = useEdits(session);
   const range = customRange ?? monthRange(month);
   const {data: metadata, isError: metadataFailed, error: metadataError, refetch: refetchMetadata} = useQuery({
     queryKey: ['metadata'], queryFn: ({signal}) => session.source.metadata(signal),
   });
-  const load = useQuery({queryKey: ['transactions', range.start, range.end], queryFn: ({signal}) => session.load(range, signal)});
+  const load = useTransactionPages(session, range);
   const {data: allRows = []} = useLiveQuery(session.rows);
   const choices: Record<Facet, Choice[]> = {
     review: reviews, posting, category: metadata?.categories ?? [], tag: metadata?.tags ?? [], account: metadata?.accounts ?? [],
@@ -99,60 +115,32 @@ function Workspace({session, live, connect}: {session: Session; live: boolean; c
     const results = rank(ordered.map(row => ({row, label: row.payee, aliases: [row.original_name ?? '', row.notes ?? '']})), search).map(item => item.row);
     return sort ? sortTransactions(results, sort, metadata) : results;
   }, [allRows, filters, metadata, range.start, range.end, search, sort]);
-  const order = useMemo(() => visible.map(row => row.id), [visible]);
-  const visibleIds = useMemo(() => new Set(order), [order]);
+  const cellEditorRow = cellEditor && visible.find(row => row.id === cellEditor.id);
+  const suspended = !!overlay || !!cellEditorRow || !!inlineEditor;
+  const grid = useTransactionGrid(visible, suspended, commandButton);
+  const {focusedRow, selectedRows} = grid;
+  const targets = selectedRows.length ? selectedRows : focusedRow ? [focusedRow] : [];
+  // TODO: Index historical payees per budget and persist the index and sync cursor in IndexedDB.
   const payees = useMemo(() => [...new Set(allRows.map(row => row.payee))].sort(), [allRows]);
-  const selected = selectedKeys(restrictSelection(selection, visibleIds));
-  const targets = selected.size ? visible.filter(row => selected.has(row.id)) : gridActive ? visible.filter(row => row.id === active) : [];
-  const focused = gridActive ? visible.find(row => row.id === active) : undefined;
   const overlayTargets = overlay?.kind === 'edit' ? overlay.ids.flatMap(id => {
     const row = session.rows.get(id);
     return row ? [row] : [];
   }) : [];
   const details = overlay?.kind === 'details' ? session.rows.get(overlay.id) : undefined;
 
-  function rowElement(id?: number) {
-    return id === undefined ? null : grid.current?.querySelector<HTMLElement>('[data-row-id="' + id + '"]') ?? null;
-  }
-
-  function focusRow(id?: number) {
-    const target = rowElement(id) ?? grid.current?.querySelector<HTMLElement>('[role=grid]') ?? commandButton.current;
-    target?.focus();
-  }
-
-  function nextRow(id: number) {
-    const index = oldOrder.current.indexOf(id);
-    return order[Math.min(Math.max(0, index), order.length - 1)];
-  }
-
-  useLayoutEffect(() => {
-    setSelection(previous => restrictSelection(previous, visibleIds));
-    if (active !== undefined && !visibleIds.has(active)) {
-      const next = nextRow(active);
-      setActive(next);
-      if (!overlay && inlinePayee === undefined && (gridActive || grid.current?.contains(document.activeElement))) {
-        requestAnimationFrame(() => {
-          if (document.activeElement === document.body || grid.current?.contains(document.activeElement)) {
-            focusRow(next);
-            setGridActive(true);
-          }
-        });
-      }
-    }
-    oldOrder.current = order;
-  }, [visibleIds, active, gridActive, overlay, inlinePayee, order]);
-
   function restoreFocus() {
     const previous = previousFocus.current;
     if (previous?.isConnected) return previous;
-    return rowElement(originRow.current) ?? rowElement(active) ?? commandButton.current;
+    return grid.rowElement(originRow.current) ?? grid.rowElement(grid.active) ?? commandButton.current;
   }
 
   function open(next: Overlay) {
     if (!overlay) {
       previousFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      originRow.current = focused?.id;
+      originRow.current = focusedRow?.id;
     }
+    setCellEditor(undefined);
+    setInlineEditor(undefined);
     setOverlay(next);
   }
 
@@ -164,16 +152,15 @@ function Workspace({session, live, connect}: {session: Session; live: boolean; c
   function go(next: string) {
     setMonth(next);
     setCustomRange(undefined);
-    setSelection(emptySelection());
-    setActive(undefined);
+    setInlineEditor(undefined);
+    setCellEditor(undefined);
+    grid.reset();
     if (overlay) close();
   }
 
   function changeSort(next?: SortDescriptor) {
     setSort(next);
-    setSelection(previous => previous.range.size
-      ? {...previous, independent: selectedKeys(previous), range: new Set()}
-      : previous);
+    grid.endRange();
   }
 
   function setFacet(facet: Facet, ids: string[]) {
@@ -185,74 +172,72 @@ function Workspace({session, live, connect}: {session: Session; live: boolean; c
     setFacet(facet, values.includes(id) ? values.filter(value => value !== id) : [...values, id]);
   }
 
-  function changeRows(label: string, rows: Row[], patch: Patch | ((row: Row) => Patch), eligible: (row: Row) => boolean = canEdit) {
+  function changeRows(label: string, rows: Row[], patch: RowPatch, eligible: (row: Row) => boolean = canEdit) {
     const valid = rows.filter(eligible);
     if (overlay) close();
     edits.save(label, valid.map(row => ({id: row.id, patch: typeof patch === 'function' ? patch(row) : patch})), rows.length - valid.length);
   }
 
   function showEditor(field: Field, rows: Row[]) {
-    if (!rows.some(canEdit) || edits.busy) return;
-    if (field === 'payee' && rows.length === 1 && !overlay) {
-      setInlinePayee(rows[0].id);
-    } else {
-      open({kind: 'edit', field, ids: rows.map(row => row.id)});
+    if (!canEditAny(rows) || edits.busy) return;
+    if (rows.length === 1 && !overlay) {
+      const [row] = rows;
+      if (field === 'payee' || field === 'note') {
+        grid.rowElement(row.id)?.querySelector('[data-editor-cell="' + field + '"]')?.scrollIntoView({block: 'nearest', inline: 'nearest'});
+        setInlineEditor({id: row.id, field});
+        return;
+      }
+
+      const anchor = grid.rowElement(row.id)?.querySelector<HTMLElement>('[data-editor-cell="' + field + '"]');
+      if (anchor) {
+        anchor.scrollIntoView({block: 'nearest', inline: 'nearest'});
+        setCellEditor({id: row.id, field, anchor});
+        return;
+      }
     }
+
+    open({kind: 'edit', field, ids: rows.map(row => row.id)});
   }
 
-  function move(direction: number, extend = false) {
-    if (!order.length) return;
-    const index = active === undefined ? -1 : order.indexOf(active);
-    const to = order[index < 0 ? direction > 0 ? 0 : order.length - 1 : Math.min(order.length - 1, Math.max(0, index + direction))];
-    if (extend && active !== undefined && to !== active) setSelection(previous => selectRange(previous, order, active, to, true));
-    focusRow(to);
+  function closeCellEditor(id: number, restoreRowFocus: boolean) {
+    setCellEditor(undefined);
+    if (restoreRowFocus) requestAnimationFrame(() => grid.focusRow(id));
   }
 
-  function review(status: 'reviewed' | 'unreviewed', rows: Row[]) {
+  function review(status: ReviewStatus, rows: Row[]) {
     const candidates = rows.filter(row => row.status !== status);
     changeRows(status === 'reviewed' ? 'Marked reviewed' : 'Marked unreviewed', candidates, {status}, canReview);
   }
 
-  const shortcutsEnabled = !overlay && inlinePayee === undefined && letterKeys;
-  const gridKeys = shortcutsEnabled && gridActive;
+  const shortcutsEnabled = !suspended && letterKeys;
+  const gridKeys = shortcutsEnabled && grid.hasFocus;
   const readyForEdit = !edits.busy && !load.isPending;
+  const reviewStatusFor = (rows: Row[]): ReviewStatus => reviewTargets(rows, 'reviewed').length ? 'reviewed' : 'unreviewed';
+  const directReviewStatus = reviewStatusFor(targets);
   useHotkeys([
-    {hotkey: 'Mod+K', callback: () => open({kind: 'commands'}), options: {enabled: !overlay && inlinePayee === undefined}},
-    {hotkey: 'Mod+Z', callback: () => edits.replay('undo'), options: {enabled: readyForEdit && edits.canUndo && !overlay && inlinePayee === undefined}},
-    {hotkey: 'Mod+Shift+Z', callback: () => edits.replay('redo'), options: {enabled: readyForEdit && edits.canRedo && !overlay && inlinePayee === undefined}},
+    {hotkey: 'Mod+K', callback: () => open({kind: 'commands'}), options: {enabled: !suspended}},
+    {hotkey: 'Mod+Z', callback: () => edits.replay('undo'), options: {enabled: readyForEdit && edits.canUndo && !suspended}},
+    {hotkey: 'Mod+Shift+Z', callback: () => edits.replay('redo'), options: {enabled: readyForEdit && edits.canRedo && !suspended}},
     {hotkey: 'A', callback: () => open({kind: 'sort'}), options: {enabled: shortcutsEnabled}},
     {hotkey: 'Shift+/', callback: () => open({kind: 'shortcuts'}), options: {enabled: shortcutsEnabled}},
     {hotkey: ['G', 'N'], callback: () => go(shiftMonth(month, 1)), options: {enabled: shortcutsEnabled}},
     {hotkey: ['G', 'P'], callback: () => go(shiftMonth(month, -1)), options: {enabled: shortcutsEnabled}},
     {hotkey: ['G', 'M'], callback: () => open({kind: 'month'}), options: {enabled: shortcutsEnabled}},
-    {hotkey: 'J', callback: () => move(1), options: {enabled: gridKeys}},
-    {hotkey: 'K', callback: () => move(-1), options: {enabled: gridKeys}},
-    {hotkey: 'Shift+J', callback: () => move(1, true), options: {enabled: gridKeys}},
-    {hotkey: 'Shift+K', callback: () => move(-1, true), options: {enabled: gridKeys}},
-    {hotkey: 'X', callback: () => { if (active !== undefined) setSelection(previous => toggleRow(previous, active)); }, options: {enabled: gridKeys}},
-    {hotkey: 'Shift+X', callback: () => { if (active !== undefined) setSelection(previous => selectRange(previous, order, active, active, false)); }, options: {enabled: gridKeys}},
-    {hotkey: 'R', callback: () => { if (focused) review(focused.status === 'reviewed' ? 'unreviewed' : 'reviewed', [focused]); }, options: {enabled: gridKeys && readyForEdit && !!focused && canReview(focused)}},
-    ...Object.entries(fieldKeys).map(([field, key]) => ({
-      hotkey: key, callback: () => showEditor(field as Field, targets), options: {enabled: gridKeys && readyForEdit && !!targets.length},
+    {hotkey: 'J', callback: () => grid.move(1), options: {enabled: shortcutsEnabled && visible.length > 0}},
+    {hotkey: 'K', callback: () => grid.move(-1), options: {enabled: shortcutsEnabled && visible.length > 0}},
+    {hotkey: 'Shift+J', callback: () => grid.move(1, true), options: {enabled: gridKeys}},
+    {hotkey: 'Shift+K', callback: () => grid.move(-1, true), options: {enabled: gridKeys}},
+    {hotkey: 'X', callback: grid.toggleFocused, options: {enabled: gridKeys}},
+    {hotkey: 'Shift+X', callback: grid.extendToFocused, options: {enabled: gridKeys}},
+    {hotkey: reviewShortcut, callback: () => review(directReviewStatus, targets),
+      options: {enabled: gridKeys && readyForEdit && reviewTargets(targets, directReviewStatus).length > 0}},
+    ...Object.values(editActions).map(({field, key}) => ({
+      hotkey: key, callback: () => showEditor(field, targets), options: {enabled: gridKeys && readyForEdit && !!targets.length},
     })),
   ]);
 
-  function gridKey(event: React.KeyboardEvent) {
-    if (!gridActive || overlay || inlinePayee !== undefined || (event.target instanceof HTMLElement && event.target.closest('input,textarea,[contenteditable=true]'))) return;
-    const direction = event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0;
-    if (direction) {
-      event.preventDefault();
-      event.stopPropagation();
-      move(direction, event.shiftKey);
-    } else if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a') {
-      event.preventDefault();
-      event.stopPropagation();
-      setSelection({independent: new Set(order), range: new Set(), anchor: active});
-    }
-  }
-
   function tableCommand(id: string, label: string, invoke: () => void, shortcut?: string): CommandItem {
-    return {id, label, invoke, shortcut, group: 'Table'};
+    return {id, label, invoke, shortcut, icon: tableIcons[id], group: 'Table'};
   }
 
   const globalCommands = [
@@ -269,26 +254,29 @@ function Workspace({session, live, connect}: {session: Session; live: boolean; c
   ];
 
   function commandTargets() {
-    if (selected.size) return visible.filter(row => selected.has(row.id));
+    if (selectedRows.length) return selectedRows;
     return overlay ? visible.filter(row => row.id === originRow.current) : targets;
   }
 
   const actionRows = commandTargets();
-  const commandItems: CommandItem[] = readyForEdit && actionRows.some(canEdit)
-    ? (Object.keys(fieldKeys) as Field[]).map(field => ({
-      id: field, label: editTitle(field, actionRows.length > 1) + (actionRows.length > 1 ? ' · ' + countLabel(actionRows.length) : ''),
-      group: 'Transactions', shortcut: fieldKeys[field], invoke: () => showEditor(field, actionRows),
+  const commandItems: CommandItem[] = readyForEdit && canEditAny(actionRows)
+    ? Object.values(editActions).map(({field, key, icon}) => ({
+      id: field, label: editTitle(field, actionRows.length > 1), icon,
+      detail: actionRows.length > 1 ? countLabel(actionRows.filter(canEdit).length) : undefined,
+      group: 'Transactions', shortcut: key, invoke: () => showEditor(field, actionRows),
     })) : [];
-  if (readyForEdit) for (const status of ['reviewed', 'unreviewed'] as const) {
-    const count = actionRows.filter(row => canReview(row) && row.status !== status).length;
+  if (readyForEdit) for (const status of reviewStatuses) {
+    const count = reviewTargets(actionRows, status).length;
     if (count) commandItems.push({id: status, group: 'Transactions', label: 'Mark ' + (actionRows.length > 1 ? count + ' ' : '') + status,
+      icon: status === 'reviewed' ? Check : Circle,
+      shortcut: status === reviewStatusFor(actionRows) ? reviewShortcut : undefined,
       invoke: () => review(status, actionRows)});
   }
   if (actionRows.length === 1) {
     const [row] = actionRows;
     commandItems.push(
-      {id: 'details', label: 'Open transaction', group: 'Transactions', invoke: () => open({kind: 'details', id: row.id})},
-      {id: 'similar', label: 'Find similar transactions', group: 'Transactions', invoke: () => { setSearch(row.payee); open({kind: 'search'}); }},
+      {id: 'details', label: 'Open transaction', icon: List, group: 'Transactions', invoke: () => open({kind: 'details', id: row.id})},
+      {id: 'similar', label: 'Find similar transactions', icon: Search, group: 'Transactions', invoke: () => { setSearch(row.payee); open({kind: 'search'}); }},
     );
   }
 
@@ -313,11 +301,16 @@ function Workspace({session, live, connect}: {session: Session; live: boolean; c
     }));
   }
 
-  function finishPayee(id: number, payee?: string) {
-    setInlinePayee(undefined);
+  function finishInline(value?: string) {
+    if (!inlineEditor) return;
+    const {id, field} = inlineEditor;
+    setInlineEditor(undefined);
     const row = session.rows.get(id);
-    if (payee && row) changeRows('Changed payee', [row], {payee});
-    requestAnimationFrame(() => focusRow(id));
+    if (value !== undefined && row) {
+      if (field === 'payee') changeRows('Changed payee', [row], {payee: value});
+      else changeRows('Changed note', [row], {notes: value});
+    }
+    requestAnimationFrame(() => grid.focusRow(id));
   }
 
   const modal = overlay && renderOverlay(overlay);
@@ -364,7 +357,7 @@ function Workspace({session, live, connect}: {session: Session; live: boolean; c
           update={setSearch} done={close} wider={() => open({kind: 'range'})} />};
       case 'range':
         return {title: 'Search a wider date range', back: () => open({kind: 'search'}), body: <RangeEditor range={range} apply={next => {
-          setCustomRange(next); setSelection(emptySelection()); setActive(undefined); open({kind: 'search'});
+          setCustomRange(next); grid.reset(); open({kind: 'search'});
         }} />};
       case 'connect':
         return {title: 'Connect Lunch Money', body: <Connect connect={connect} live={live} />};
@@ -381,21 +374,11 @@ function Workspace({session, live, connect}: {session: Session; live: boolean; c
       case 'edit': {
         const {field} = current;
         const rows = overlayTargets.filter(canEdit);
-        if (!rows.length) return {title: 'Transaction unavailable', body: <p className="editor">The target rows are unavailable for editing.</p>};
-        const save = (label: string, patch: Patch | ((row: Row) => Patch)) => changeRows(label, overlayTargets, patch);
-        const body = field === 'category' ? <CategoryPicker rows={rows} choices={choices.category} apply={category_id => save('Changed category', {category_id})} />
-          : field === 'tags' ? <TagPicker rows={rows} choices={choices.tag} apply={staged => save('Changed tags', row => {
-            const tagIds = new Set(row.tag_ids);
-            for (const [id, add] of staged) { if (add) tagIds.add(id); else tagIds.delete(id); }
-            return {tag_ids: [...tagIds]};
-          })} />
-          : field === 'date' ? <DateEditor value={commonValue(rows.map(row => row.date), '')} apply={date => save('Changed date', {date})} />
-          : field === 'payee' ? <PayeeEditor value={commonValue(rows.map(row => row.payee), '')} payees={payees} apply={payee => save('Changed payee', {payee})} cancel={close} />
-          : rows.length === 1 ? <Details row={rows[0]} note category={lookUp('category', String(rows[0].category_id ?? 0))}
-              account={lookUp('account', accountKey(rows[0]))} apply={notes => save('Changed note', {notes})} />
-            : <NoteEditor value={commonValue(rows.map(row => row.notes ?? ''), '')} apply={notes => save('Changed notes', {notes})} />;
-        return {title: editTitle(field, overlayTargets.length > 1) + ' · ' + countLabel(rows.length),
-          body: <>{rows.length < overlayTargets.length && <p className="warning">{overlayTargets.length - rows.length} ineligible rows will be skipped.</p>}{body}</>};
+        return {
+          title: rows.length ? editTitle(field, overlayTargets.length > 1) + ' · ' + countLabel(rows.length) : 'Transaction unavailable',
+          body: <TransactionEditor field={field} rows={rows} skipped={overlayTargets.length - rows.length}
+            metadata={metadata} payees={payees} save={(label, patch) => changeRows(label, overlayTargets, patch)} close={close} />,
+        };
       }
     }
   }
@@ -404,17 +387,22 @@ function Workspace({session, live, connect}: {session: Session; live: boolean; c
     <header className="top"><strong>Lunchline</strong><span>{live ? 'Lunch Money' : 'Sample data'}</span>
       <button onClick={() => open({kind: 'connect'})}>{live ? 'Connection' : 'Connect Lunch Money'}</button>
       <button onClick={() => open({kind: 'shortcuts'})}>Shortcuts <kbd>?</kbd></button>
-      <button ref={commandButton} onClick={() => open({kind: 'commands'})}>Commands <kbd>⌘K</kbd></button>
+      <button ref={commandButton} onClick={() => open({kind: 'commands'})}><Command className="action-icon" aria-hidden />Commands <kbd>⌘K</kbd></button>
     </header>
     <main className="layout">
       <section className="workspace" aria-labelledby="title">
         <h1 id="title">Transactions</h1>
-        <div className="controls">
-          <button onClick={() => go(shiftMonth(month, -1))} aria-label="Previous month">‹</button>
+        <div className="controls transaction-toolbar">
+          <button onClick={() => go(shiftMonth(month, -1))} aria-label="Previous month"><ChevronLeft className="action-icon" aria-hidden /></button>
           <button onClick={() => open({kind: 'month'})}>{monthLabel(month)}</button>
-          <button onClick={() => go(shiftMonth(month, 1))} aria-label="Next month">›</button>
-          <button onClick={() => open({kind: 'filters'})}>Filter</button>
-          <button onClick={() => open({kind: 'search'})}>Search transactions</button>
+          <button onClick={() => go(shiftMonth(month, 1))} aria-label="Next month"><ChevronRight className="action-icon" aria-hidden /></button>
+          <button onClick={() => open({kind: 'filters'})}><FilterIcon className="action-icon" aria-hidden />Filter</button>
+          <button onClick={() => open({kind: 'search'})}><Search className="action-icon" aria-hidden />Search transactions</button>
+          {selectedRows.length > 0 && <div className="selection-toolbar">
+            <span role="status">{countLabel(selectedRows.length)} selected</span>
+            <button onClick={() => open({kind: 'commands'})}>Selection actions</button>
+            <button onClick={grid.clearSelection}>Clear selection</button>
+          </div>}
         </div>
         <div className="controls chips" aria-label="Active filters">
           {facets.flatMap(facet => (filters[facet] ?? []).map(id => <button key={facet + id}
@@ -422,25 +410,20 @@ function Workspace({session, live, connect}: {session: Session; live: boolean; c
           {search && <button onClick={() => setSearch('')} aria-label="Clear search">Search: {search} ×</button>}
           {customRange && <button onClick={() => go(month)} aria-label="Return to month">{range.start} – {range.end} ×</button>}
         </div>
-        {selected.size > 0 && <div className="controls selection-toolbar">
-          <span role="status">{countLabel(selected.size)} selected</span>
-          <button onClick={() => open({kind: 'commands'})}>Selection actions</button>
-          <button onClick={() => setSelection(emptySelection())}>Clear selection</button>
-        </div>}
         {metadataFailed && <p role="alert">{message(metadataError)} <button onClick={() => void refetchMetadata()}>Retry metadata</button></p>}
-        {load.isError && <p role="alert">{message(load.error)} <button onClick={() => void load.refetch()}>Retry transactions</button></p>}
-        <div onKeyDownCapture={gridKey}>
-          <Grid rows={visible} sort={gridSort} onSort={changeSort} selected={selected} select={keys => {
-            const next = keys === 'all' ? new Set(order) : new Set([...keys].map(Number));
-            const changes = order.filter(id => next.has(id) !== selected.has(id));
-            setSelection(previous => ({independent: next, range: new Set(), anchor: changes.length === 1 ? changes[0] : active ?? previous.anchor}));
-          }} active={active} activeScope={gridActive} grid={grid} enter={id => { setGridActive(true); setActive(id); }} leave={() => setGridActive(false)}
-            open={(field, row) => showEditor(field, [row])} details={id => open({kind: 'details', id})} editing={inlinePayee}
-            payees={payees} applyPayee={finishPayee} cancelPayee={finishPayee}
-            leavePayee={id => setInlinePayee(current => current === id ? undefined : current)} metadata={metadata} loading={load.isPending} />
-        </div>
+        {load.isError && <p role="alert">{message(load.error)} <button onClick={() => void load.retry()}>Retry transactions</button></p>}
+        <Grid rows={visible} sort={gridSort} onSort={changeSort} interaction={grid}
+          open={(field, row) => showEditor(field, [row])} details={id => open({kind: 'details', id})}
+          cellEditorHandle={cellEditorHandle}
+          inlineEditor={inlineEditor && {
+            ...inlineEditor,
+            payees,
+            apply: finishInline,
+            cancel: () => finishInline(),
+            leave: () => setInlineEditor(current => current === inlineEditor ? undefined : current),
+          }} metadata={metadata} loading={load.isPending} />
         <footer className="controls status">
-          <span role="status">{edits.busy ? 'Saving…' : edits.notice || (!load.isPending ? countLabel(visible.length) : '')}</span>
+          <span role="status">{edits.busy ? 'Saving…' : load.isPending ? 'Loading transactions…' : countLabel(visible.length)}</span>
           {edits.canUndo && <button disabled={edits.busy} onClick={() => edits.replay('undo')}>Undo</button>}
           {edits.canRedo && <button disabled={edits.busy} onClick={() => edits.replay('redo')}>Redo</button>}
         </footer>
@@ -449,6 +432,33 @@ function Workspace({session, live, connect}: {session: Session; live: boolean; c
       </section>
       <Budget session={session} month={month} metadata={metadata} />
     </main>
+    <Popover.Root handle={cellEditorHandle} open={!!cellEditorRow}
+      triggerId={cellEditor && cellEditorTriggerId(cellEditor.field, cellEditor.id)}
+      onOpenChange={(open, {trigger, reason}) => {
+        if (!open) {
+          if (cellEditor) closeCellEditor(cellEditor.id, reason === 'escape-key');
+          return;
+        }
+
+        const cell = trigger?.closest<HTMLElement>('[data-editor-cell]');
+        const field = cell?.dataset.editorCell;
+        const id = cell?.closest<HTMLElement>('[data-row-id]')?.dataset.rowId;
+        const row = visible.find(row => row.id === Number(id));
+        if (row && isCellEditorField(field)) showEditor(field, [row]);
+      }}>
+      {cellEditor && cellEditorRow && <Popover.Portal>
+        <Popover.Positioner anchor={cellEditor.anchor} align="start" sideOffset={4} className="cell-editor-positioner">
+          <Popover.Popup className="cell-editor-popup" aria-label={editTitle(cellEditor.field, false)} initialFocus={false} finalFocus={false}>
+            <TransactionEditor key={cellEditor.field + cellEditor.id} field={cellEditor.field} rows={[cellEditorRow]} skipped={0}
+              metadata={metadata} payees={payees} close={() => closeCellEditor(cellEditor.id, true)}
+              save={(label, patch) => {
+                closeCellEditor(cellEditor.id, true);
+                changeRows(label, [cellEditorRow], patch);
+              }} />
+          </Popover.Popup>
+        </Popover.Positioner>
+      </Popover.Portal>}
+    </Popover.Root>
     {modal && overlay && <Modal title={modal.title} close={close} restore={restoreFocus} back={modal.back}>
       <div key={overlay.kind === 'facet' ? 'facet:' + overlay.facet : overlay.kind === 'edit' ? 'edit:' + overlay.field : overlay.kind}>{modal.body}</div>
     </Modal>}
@@ -470,7 +480,7 @@ function Connect({connect, live}: {connect: (token?: string) => void; live: bool
   const [token, setToken] = useState('');
   return <form className="editor" onSubmit={event => { event.preventDefault(); if (token.trim()) connect(token.trim()); }}>
     <label>Lunch Money API token<input type="password" autoComplete="off" value={token} onChange={event => setToken(event.target.value)} /></label>
-    <p>The browser sends this token directly to Lunch Money. It lasts until you reload or disconnect.</p>
+    <p>This browser saves your token for this site and sends it directly to Lunch Money. Disconnect clears the saved token.</p>
     <div className="controls"><button type="submit" disabled={!token.trim()}>Connect</button>
       {live && <button type="button" onClick={() => connect()}>Disconnect</button>}</div>
   </form>;

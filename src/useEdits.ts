@@ -1,3 +1,4 @@
+import {toast} from 'sonner';
 import {useRef, useState} from 'react';
 import {message, type Edit, type Session} from './data';
 import type {Update} from './api';
@@ -6,7 +7,6 @@ export function useEdits(session: Session) {
   const [undo, setUndo] = useState<Edit[]>([]);
   const [redo, setRedo] = useState<Edit[]>([]);
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState('');
   const [issues, setIssues] = useState<string[]>([]);
   const active = useRef(false);
 
@@ -14,7 +14,6 @@ export function useEdits(session: Session) {
     if (active.current) return;
     active.current = true;
     setBusy(true);
-    setNotice('');
     setIssues([]);
     try {
       await work();
@@ -34,9 +33,9 @@ export function useEdits(session: Session) {
       if (count) {
         setUndo([...undo, result.edit]);
         setRedo([]);
-        setNotice(label + ' · ' + count + ' saved');
+        toast.success(label, {description: count + (count === 1 ? ' transaction saved' : ' transactions saved')});
       } else if (!result.issues.length) {
-        setNotice('No changes to save.');
+        toast.info('No changes to save.');
       }
     });
   }
@@ -57,12 +56,12 @@ export function useEdits(session: Session) {
       if (moved.length) {
         moveBack([...source.slice(0, -1), ...(remaining.length ? [{...original, changes: remaining}] : [])]);
         moveForward(stack => [...stack, {...original, changes: moved}]);
-        setNotice((direction === 'undo' ? 'Undid ' : 'Redid ') + original.label.toLowerCase() + ' · ' + moved.length + ' saved');
+        toast.success(direction === 'undo' ? 'Undo complete' : 'Redo complete', {description: original.label});
       } else if (!result.issues.length) {
-        setNotice('No changes to save.');
+        toast.info('No changes to save.');
       }
     });
   }
 
-  return {busy, notice, issues, clearIssues: () => setIssues([]), canUndo: !!undo.length, canRedo: !!redo.length, save, replay};
+  return {busy, issues, clearIssues: () => setIssues([]), canUndo: !!undo.length, canRedo: !!redo.length, save, replay};
 }
