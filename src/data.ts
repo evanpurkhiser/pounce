@@ -1,0 +1,189 @@
+import {createCollection, createTransaction, localOnlyCollectionOptions} from '@tanstack/db';
+import {QueryClient} from '@tanstack/react-query';
+import {inRange, monthRange, type DataSource, type Patch, type Range, type Row, type Update} from './api';
+
+type Change = {id: number; before: Patch; after: Patch};
+export type Edit = {label: string; changes: Change[]};
+export type WriteResult = {edit: Edit; issues: string[]};
+type EditableKey = keyof Patch;
+
+function equal(key: EditableKey, left: unknown, right: unknown) {
+  if (key === 'tag_ids') {
+    const a = new Set(left as number[]);
+    const b = new Set(right as number[]);
+    return a.size === b.size && [...a].every(id => b.has(id));
+  }
+  return key === 'notes' ? (left ?? '') === (right ?? '') : left === right;
+}
+
+function patchValues(row: Row, fields: EditableKey[]): Patch {
+  return Object.fromEntries(fields.map(key => [key, row[key] ?? (key === 'notes' ? '' : null)]));
+}
+
+function patchKeys(patch: Patch) {
+  return Object.keys(patch) as EditableKey[];
+}
+
+export function createSession(source: DataSource) {
+  const query = new QueryClient({defaultOptions: {queries: {retry: false, staleTime: 30_000, refetchOnWindowFocus: false}}});
+  const rows = createCollection(localOnlyCollectionOptions<Row, number>({getKey: row => row.id}));
+  // An in-flight month snapshot must never overwrite a newer local write.
+  let writeVersion = 0;
+  let pending: Promise<unknown> | undefined;
+
+  async function load(range: Range, signal: AbortSignal) {
+    for (;;) {
+      await pending?.catch(() => undefined);
+      const version = writeVersion;
+      const fetched = await source.list(range, signal);
+      signal.throwIfAborted();
+      if (version !== writeVersion) continue;
+
+      const fresh = new Map(fetched.map(row => [row.id, row]));
+      const removed = [...rows.values()].filter(row => inRange(row.date, range) && !fresh.has(row.id));
+      if (removed.length) rows.delete(removed.map(row => row.id));
+      for (const row of fetched) mergeRow(row);
+      return fetched.length;
+    }
+  }
+
+  function mergeRow(row: Row) {
+    if (rows.has(row.id)) rows.update(row.id, draft => { Object.assign(draft, row); });
+    else rows.insert(row);
+  }
+
+  async function getCurrent(ids: number[]) {
+    const result = new Map<number, Row>();
+    if (ids.length > 16) {
+      const months = new Set(ids.flatMap(id => {
+        const date = rows.get(id)?.date;
+        return date ? [date.slice(0, 7)] : [];
+      }));
+      for (const month of months) {
+        for (const row of await source.list(monthRange(month))) result.set(row.id, row);
+      }
+    }
+    const missing = ids.filter(id => !result.has(id));
+    for (let index = 0; index < missing.length; index += 16) {
+      const fetched = await Promise.all(missing.slice(index, index + 16).map(id => source.get(id)));
+      for (const row of fetched) result.set(row.id, row);
+    }
+    return ids.map(id => result.get(id)!);
+  }
+
+  function tagChanges(before: number[], after: number[]) {
+    return {added: after.filter(id => !before.includes(id)), removed: before.filter(id => !after.includes(id))};
+  }
+
+  function applyTagChanges(current: number[], added: number[], removed: number[]) {
+    return [...new Set([...current.filter(id => !removed.includes(id)), ...added])];
+  }
+
+  async function mutate(label: string, changes: Update[]): Promise<WriteResult> {
+    const issues: string[] = [];
+    const committed: Change[] = [];
+    const patches = new Map(changes.map(change => [change.id, change.patch]));
+    const tx = createTransaction({
+      autoCommit: false,
+      mutationFn: async ({transaction}) => {
+        const originals = new Map(transaction.mutations.map(mutation => [Number(mutation.key), mutation]));
+        for (let index = 0; index < changes.length; index += 500) {
+          const batch = changes.slice(index, index + 500);
+          try {
+            const sent = batch.map(item => {
+              const original = originals.get(item.id)?.original as Row;
+              const delta = item.patch.tag_ids && tagChanges(original.tag_ids, item.patch.tag_ids);
+              return {...item, addTags: delta && !delta.removed.length ? delta.added : undefined};
+            });
+            const addOnly = new Map(sent.flatMap(item => item.addTags ? [[item.id, item.addTags] as const] : []));
+            const confirmed = await source.update(sent);
+            for (const row of confirmed) {
+              const mutation = originals.get(row.id);
+              const patch = patches.get(row.id);
+              if (!mutation || !patch) continue;
+              const requested = patchKeys(patch);
+              const added = addOnly.get(row.id);
+              const saved = requested.filter(key => key === 'tag_ids' && added
+                ? added.every(tag => row.tag_ids.includes(tag)) : equal(key, row[key], patch[key]));
+              if (saved.length !== requested.length) issues.push('#' + row.id + ' returned a different value from Lunch Money.');
+              if (saved.length) {
+                const before = patchValues(mutation.original as Row, saved);
+                if (added && saved.includes('tag_ids')) before.tag_ids = row.tag_ids.filter(tag => !added.includes(tag));
+                committed.push({id: row.id, before, after: patchValues(row, saved)});
+              }
+              rows.utils.acceptMutations({mutations: [{...mutation, modified: {...mutation.modified, ...row}}]});
+            }
+            const returned = new Set(confirmed.map(row => row.id));
+            const missing = batch.filter(change => !returned.has(change.id));
+            if (missing.length) issues.push('Missing write confirmation for ' + missing.map(change => '#' + change.id).join(', '));
+          } catch (error) {
+            issues.push(batch.map(change => '#' + change.id).join(', ') + ' · ' + message(error));
+          }
+        }
+
+        if (!committed.length && issues.length) throw new Error(issues.join('\n'));
+      },
+    });
+    tx.mutate(() => {
+      for (const {id, patch} of changes) rows.update(id, row => { Object.assign(row, patch); });
+    });
+    await tx.commit();
+    return {edit: {label, changes: committed}, issues};
+  }
+
+  function write(label: string, getUpdates: () => Promise<Update[]>) {
+    if (pending) return Promise.reject(new Error('An edit is still saving.'));
+    writeVersion++;
+    const operation = (async () => {
+      const requested = await getUpdates();
+      const requestedTags = requested.filter(({patch}) => patch.tag_ids !== undefined);
+      const currentTags = new Map((await getCurrent(requestedTags.map(({id}) => id))).map(row => [row.id, row]));
+      const updates = requested.map(({id, patch}) => {
+        const current = currentTags.get(id);
+        const previous = rows.get(id);
+        if (!current || !previous || patch.tag_ids === undefined) return {id, patch};
+        const {added, removed} = tagChanges(previous.tag_ids, patch.tag_ids);
+        mergeRow(current);
+        return {id, patch: {...patch, tag_ids: applyTagChanges(current.tag_ids, added, removed)}};
+      }).filter(({id, patch}) => {
+        const row = rows.get(id);
+        return row && patchKeys(patch).some(key => !equal(key, row[key], patch[key]));
+      });
+      return updates.length ? await mutate(label, updates) : {edit: {label, changes: []}, issues: []};
+    })();
+    pending = operation;
+    void operation.finally(() => {
+      writeVersion++;
+      pending = undefined;
+      void query.invalidateQueries({queryKey: ['budget']});
+      void query.invalidateQueries({queryKey: ['transactions'], refetchType: 'none'});
+    }).catch(() => undefined);
+    return operation;
+  }
+
+  function replay(edit: Edit, direction: 'undo' | 'redo') {
+    const from = direction === 'undo' ? 'after' : 'before';
+    const to = direction === 'undo' ? 'before' : 'after';
+    return write(edit.label, async () => {
+      const fresh = await getCurrent(edit.changes.map(change => change.id));
+      return edit.changes.map((change, index) => {
+        const current = fresh[index];
+        const fields = patchKeys(change[to]);
+        const conflicts = fields.filter(key => key !== 'tag_ids' && !equal(key, current[key], change[from][key]));
+        if (conflicts.length) throw new Error('Transaction #' + change.id + ' changed in Lunch Money (' + conflicts.join(', ') + ').');
+        const patch = {...change[to]};
+        if (patch.tag_ids) {
+          const {added, removed} = tagChanges(change[from].tag_ids ?? [], patch.tag_ids);
+          patch.tag_ids = applyTagChanges(current.tag_ids, added, removed);
+        }
+        mergeRow(current);
+        return {id: current.id, patch};
+      });
+    });
+  }
+
+  return {source, query, rows, load, write, replay};
+}
+
+export type Session = ReturnType<typeof createSession>;
+export const message = (error: unknown) => error instanceof Error ? error.message : String(error);
