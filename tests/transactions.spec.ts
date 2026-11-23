@@ -1335,35 +1335,48 @@ test('monthly budget stays pinned, scrolls independently, and toggles with ]', a
   await expect(budget.getByRole('meter', {name: 'Food budget used'})).toBeVisible();
   const bar = (await page.getByRole('banner').boundingBox())!;
   const initial = (await budget.boundingBox())!;
+  const heading = budget.getByRole('heading', {name: 'Monthly budget'});
+  const headingInset = (await heading.boundingBox())!.y - initial.y;
+  expect(headingInset).toBeGreaterThan(0);
   const width = await page.evaluate(() => document.documentElement.clientWidth);
   expect(initial.y).toBeCloseTo(bar.y + bar.height, 0);
   expect(initial.x + initial.width).toBeCloseTo(width, 0);
-  expect(initial.y + initial.height).toBeCloseTo(260, 0);
+  expect(initial.height).toBeCloseTo(260, 0);
 
-  await page.evaluate(() => window.scrollTo(0, 16));
+  await page.mouse.move(400, 200);
+  for (const delta of [16, 16, 16, 82, 60]) {
+    const scroll = await page.evaluate(() => window.scrollY);
+    await page.mouse.wheel(0, delta);
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(scroll + delta);
+    const top = Math.max(0, initial.y - scroll - delta);
+    await expect
+      .poll(async () => Math.abs((await budget.boundingBox())!.y - top))
+      .toBeLessThan(1);
+    const bounds = (await budget.boundingBox())!;
+    expect(bounds.height).toBeCloseTo(initial.height, 0);
+    expect((await heading.boundingBox())!.y - bounds.y).toBeCloseTo(headingInset, 0);
+  }
+  await page.mouse.wheel(0, 5000);
   await expect
-    .poll(async () => Math.abs((await budget.boundingBox())!.y - (initial.y - 16)))
-    .toBeLessThan(1);
-  const partial = (await budget.boundingBox())!;
-  expect(partial.y + partial.height).toBeCloseTo(260, 0);
-
-  await page.evaluate(() => window.scrollTo(0, 130));
-  await expect
-    .poll(async () => Math.abs((await budget.boundingBox())!.y))
+    .poll(() =>
+      page.evaluate(() => document.documentElement.scrollHeight - innerHeight - scrollY),
+    )
     .toBeLessThan(1);
   const pinned = (await budget.boundingBox())!;
+  expect(pinned.y).toBeCloseTo(0, 0);
   expect(pinned.y + pinned.height).toBeCloseTo(260, 0);
-  await page.evaluate(() => window.scrollTo(0, 190));
-  await expect
-    .poll(async () => Math.abs((await budget.boundingBox())!.y))
-    .toBeLessThan(1);
 
+  const content = budget.getByRole('list').first().locator('..');
+  const headingTop = (await heading.boundingBox())!.y;
   const scroll = await page.evaluate(() => window.scrollY);
+  expect(await content.evaluate(element => element.scrollTop)).toBe(0);
+
   await page.mouse.move(pinned.x + pinned.width / 2, pinned.y + pinned.height / 2);
   await page.mouse.wheel(0, 80);
   await expect
-    .poll(() => budget.evaluate(element => element.scrollTop))
+    .poll(() => content.evaluate(element => element.scrollTop))
     .toBeGreaterThan(0);
+  expect((await heading.boundingBox())!.y).toBe(headingTop);
   expect(await page.evaluate(() => window.scrollY)).toBe(scroll);
 
   const expandedGrid = (await grid.boundingBox())!.width;

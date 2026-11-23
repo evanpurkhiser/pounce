@@ -170,59 +170,61 @@ export const Budget = memo(function Budget({
     <div className={styles.column} hidden={hidden}>
       <aside id="monthly-budget" className={styles.budget} aria-label="Monthly budget">
         <h2>Monthly budget</h2>
-        {budget.isPending && <p role="status">Loading budget…</p>}
-        {budget.isError && (
-          <p role="alert">
-            {message(budget.error)}{' '}
-            <button type="button" onClick={() => void budget.refetch()}>
-              Retry
-            </button>
-          </p>
-        )}
-        {budget.data?.aligned && !targets.some(row => row.limit !== null) && (
-          <p>No category targets for this month.</p>
-        )}
-        {budget.data?.aligned === false && (
-          <p>
-            Budget cadence: {metadata?.cadence ?? 'custom'}. Targets are grouped by budget
-            period.
-          </p>
-        )}
-        {periods.isFetching && <p role="status">Loading budget periods…</p>}
-        {periods.isError && (
-          <p role="alert">
-            {message(periods.error)}{' '}
-            <button type="button" onClick={() => void periods.refetch()}>
-              Retry periods
-            </button>
-          </p>
-        )}
-        {periods.isSuccess && !targets.length && (
-          <p>No budget periods with targets overlap this month.</p>
-        )}
-        <ul className={styles.budgetList}>
-          {targets.map(row => (
-            <li key={row.categoryId + row.period} className={styles.budgetItem}>
-              {row.children?.length ? (
-                <details open>
-                  <summary>
-                    <ChevronRight className={ui.actionIcon} aria-hidden />
-                    {budgetItem(row)}
-                  </summary>
-                  <ul className={`${styles.budgetList} ${styles.budgetChildren}`}>
-                    {row.children.map(child => (
-                      <li key={child.categoryId} className={styles.budgetItem}>
-                        {budgetItem(child)}
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              ) : (
-                budgetItem(row)
-              )}
-            </li>
-          ))}
-        </ul>
+        <div className={styles.budgetContent}>
+          {budget.isPending && <p role="status">Loading budget…</p>}
+          {budget.isError && (
+            <p role="alert">
+              {message(budget.error)}{' '}
+              <button type="button" onClick={() => void budget.refetch()}>
+                Retry
+              </button>
+            </p>
+          )}
+          {budget.data?.aligned && !targets.some(row => row.limit !== null) && (
+            <p>No category targets for this month.</p>
+          )}
+          {budget.data?.aligned === false && (
+            <p>
+              Budget cadence: {metadata?.cadence ?? 'custom'}. Targets are grouped by
+              budget period.
+            </p>
+          )}
+          {periods.isFetching && <p role="status">Loading budget periods…</p>}
+          {periods.isError && (
+            <p role="alert">
+              {message(periods.error)}{' '}
+              <button type="button" onClick={() => void periods.refetch()}>
+                Retry periods
+              </button>
+            </p>
+          )}
+          {periods.isSuccess && !targets.length && (
+            <p>No budget periods with targets overlap this month.</p>
+          )}
+          <ul className={styles.budgetList}>
+            {targets.map(row => (
+              <li key={row.categoryId + row.period} className={styles.budgetItem}>
+                {row.children?.length ? (
+                  <details open>
+                    <summary>
+                      <ChevronRight className={ui.actionIcon} aria-hidden />
+                      {budgetItem(row)}
+                    </summary>
+                    <ul className={`${styles.budgetList} ${styles.budgetChildren}`}>
+                      {row.children.map(child => (
+                        <li key={child.categoryId} className={styles.budgetItem}>
+                          {budgetItem(child)}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                ) : (
+                  budgetItem(row)
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
       </aside>
     </div>
   );
