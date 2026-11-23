@@ -1,7 +1,10 @@
 import {memo} from 'react';
+import {ChevronRight} from 'lucide-react';
 import {useQuery} from '@tanstack/react-query';
 import {message, type Session} from './data';
 import {monthRange, money, shiftMonth, type Metadata} from './api';
+import styles from './Budget.module.css';
+import ui from './ui.module.css';
 
 type BudgetRow = {categoryId: number; limit: number | null; spent: number; period: string};
 type BudgetNode = BudgetRow & {children?: BudgetRow[]};
@@ -39,7 +42,7 @@ function groupTargets(rows: BudgetRow[], metadata?: Metadata): BudgetNode[] {
   return nodes;
 }
 
-export const Budget = memo(function Budget({session, month, metadata}: {session: Session; month: string; metadata?: Metadata}) {
+export const Budget = memo(function Budget({session, month, metadata, hidden}: {session: Session; month: string; metadata?: Metadata; hidden: boolean}) {
   const range = monthRange(month);
   const budget = useQuery({queryKey: ['budget', month], queryFn: ({signal}) => session.source.summary(range, signal)});
   const padding = metadata?.cadence === 'year' ? 12 : 2;
@@ -74,16 +77,16 @@ export const Budget = memo(function Budget({session, month, metadata}: {session:
   function budgetItem(row: BudgetRow) {
     const label = metadata?.categories.find(choice => Number(choice.id) === row.categoryId)?.label ?? 'Category ' + row.categoryId;
     return <>
-      <span className="budget-amount">{label}<span>{formatBudget(row.spent)}{row.limit == null ? '' : ' / ' + formatBudget(row.limit)}</span></span>
+      <span className={styles.budgetAmount}>{label}<span>{formatBudget(row.spent)}{row.limit == null ? '' : ' / ' + formatBudget(row.limit)}</span></span>
       {row.period && <small>{row.period}</small>}
       {row.limit != null && row.limit > 0
         ? <meter aria-label={label + ' budget used' + (row.period ? ' · ' + row.period : '')}
           min={0} max={row.limit} value={Math.max(0, Math.min(row.spent, row.limit))} />
-        : <span className="budget-unset" role="img" aria-label={label + (row.limit === 0 ? ' has a zero budget target' : ' has no budget target')} />}
+        : <span className={styles.budgetUnset} role="img" aria-label={label + (row.limit === 0 ? ' has a zero budget target' : ' has no budget target')} />}
     </>;
   }
 
-  return <aside className="budget" aria-label="Monthly budget">
+  return <aside id="monthly-budget" className={styles.budget} aria-label="Monthly budget" hidden={hidden}>
     <h2>Monthly budget</h2>
     {budget.isPending && <p role="status">Loading budget…</p>}
     {budget.isError && <p role="alert">{message(budget.error)} <button onClick={() => void budget.refetch()}>Retry</button></p>}
@@ -92,12 +95,15 @@ export const Budget = memo(function Budget({session, month, metadata}: {session:
     {periods.isFetching && <p role="status">Loading budget periods…</p>}
     {periods.isError && <p role="alert">{message(periods.error)} <button onClick={() => void periods.refetch()}>Retry periods</button></p>}
     {periods.isSuccess && !targets.length && <p>No budget periods with targets overlap this month.</p>}
-    <ul className="budget-list">
-      {targets.map(row => <li key={row.categoryId + row.period} className="budget-item">
+    <ul className={styles.budgetList}>
+      {targets.map(row => <li key={row.categoryId + row.period} className={styles.budgetItem}>
         {row.children?.length ? <details open>
-          <summary>{budgetItem(row)}</summary>
-          <ul className="budget-list budget-children">
-            {row.children.map(child => <li key={child.categoryId} className="budget-item">{budgetItem(child)}</li>)}
+          <summary>
+            <ChevronRight className={ui.actionIcon} aria-hidden />
+            {budgetItem(row)}
+          </summary>
+          <ul className={`${styles.budgetList} ${styles.budgetChildren}`}>
+            {row.children.map(child => <li key={child.categoryId} className={styles.budgetItem}>{budgetItem(child)}</li>)}
           </ul>
         </details> : budgetItem(row)}
       </li>)}

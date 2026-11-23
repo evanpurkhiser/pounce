@@ -1,0 +1,102 @@
+.grid {
+  --grid-rule: 1px solid #e7e9ec;
+  display: grid;
+  grid-template-columns:
+    2rem max-content var(--category-width, max-content)
+    var(--payee-width, minmax(8rem, 1.2fr)) max-content
+    var(--note-width, minmax(12rem, 1.6fr)) var(--tags-width, minmax(6rem, 1fr)) 2.75rem;
+  width: 100%;
+  min-width: 760px;
+  isolation: isolate;
+  background: white;
+  border: 1px solid var(--line);
+  font-size: .94rem;
+  text-align: left;
+}
+.grid :is(thead, tbody, tr) { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; }
+.grid, .grid tbody { row-rule: var(--grid-rule); }
+.grid tr:not([data-empty]) { column-rule: var(--grid-rule); }
+.grid :is(th, td) { position: relative; align-content: center; min-width: 0; padding: .38rem .5rem; white-space: nowrap; }
+.grid :is(th, td):has(> :is(.cellAction, .sortButton, .gridCheckbox)) { padding: 0; }
+.grid thead { position: sticky; inset-block-start: 0; z-index: 4; background: #eff1f3; }
+.grid tr:focus-within { position: relative; background: #eff5ff; outline: none; }
+.grid tr[aria-selected=true] { background: var(--selected); }
+/* Center the focus lines on the row dividers. */
+.grid tr:focus-within::after {
+  content: "";
+  position: absolute;
+  inset: -.5px 0;
+  z-index: 1;
+  border-block: 1px solid var(--focus);
+  pointer-events: none;
+}
+.grid :is(th, td, button, input, textarea):focus-visible { outline-offset: -2px; }
+.grid [data-empty] > td { grid-column: 1 / -1; padding: .75rem; }
+.gridCheckbox { display: grid; margin: .38rem .5rem; place-items: center; width: 1.05rem; height: 1.05rem; border: 1px solid #7d8793; border-radius: 3px; background: white; cursor: pointer; }
+.gridCheckbox input { position: absolute; inset: 0; opacity: 0; margin: 0; width: 100%; height: 100%; cursor: inherit; }
+.gridCheckbox:has(:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+.checkboxMark { display: block; width: .8rem; height: .8rem; color: white; pointer-events: none; }
+.gridCheckbox:has(:checked, :indeterminate) { background: var(--focus); border-color: var(--focus); }
+.amount { text-align: right; font-variant-numeric: tabular-nums; }
+.amountContent, .amountIndicators { display: flex; align-items: center; gap: .4rem; }
+.amountContent { justify-content: space-between; }
+.amountIndicators { color: #4b5563; }
+.cellAction, .grid [data-editing=true] :is(input[role=combobox], textarea) {
+  display: block;
+  width: 100%;
+  padding: .51rem .7rem;
+  text-align: left;
+  border: 1px solid transparent;
+  background: transparent;
+}
+.cellAction::before { content: ""; position: absolute; inset: 0; }
+.cellAction:is(:focus-visible, [aria-expanded=true]) { outline: none; }
+.cellAction:is(:focus-visible, [aria-expanded=true])::before { outline: 2px solid var(--focus); outline-offset: -2px; }
+.cellAction:hover { text-decoration: underline; }
+[data-editor-cell=payee] { font-weight: 650; }
+.editCell { --edit-background: #fff3e5; }
+.editCell:is(:focus-within, [data-editing=true], :has(> .cellAction[aria-expanded=true])) { background: var(--edit-background); }
+.editCell:is(:focus-within, [data-editing=true], :has(> .cellAction[aria-expanded=true])):not([data-editor-cell=note][data-editing=true])::after,
+.editCell[data-editor-cell=note][data-editing=true] > form::after {
+  content: "";
+  position: absolute;
+  inset: -.5px;
+  z-index: 2;
+  border: 1px solid #c35113;
+  pointer-events: none;
+}
+.editCell:focus-visible, .editCell :focus-visible, .editCell .cellAction::before { outline: none; }
+.grid th:has(.sortButton) { cursor: pointer; }
+.grid th:has(.sortButton):hover { background: #e5eaf2; }
+.sortButton { display: block; width: 100%; padding: .38rem .5rem; border: 0; border-radius: 0; background: transparent; font-weight: inherit; text-align: inherit; }
+.sortButton:hover:not(:disabled) { background: transparent; }
+.sortButton[aria-keyshortcuts] { overflow: hidden; text-overflow: ellipsis; padding-inline-end: .75rem; }
+.resizeHandle { position: absolute; inset-block: 0; inset-inline-end: -.25rem; z-index: 2; inline-size: .5rem; cursor: col-resize; touch-action: none; }
+.resizeHandle:hover { background: #c6d1df; }
+.sortIndicator { margin-inline-start: .35rem; color: #596579; }
+.grid th[aria-sort] .sortIndicator { color: var(--focus); }
+.cellAction > span { display: block; min-block-size: 1lh; overflow: hidden; text-overflow: ellipsis; }
+.grid .reviewCell { text-align: center; }
+.reviewHeadingLabel { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.grid .reviewCell .sortIndicator { position: absolute; inset-inline-end: .13rem; top: 50%; margin: 0; transform: translateY(-50%); font-size: .8em; }
+.grid .reviewCell svg { color: #687482; }
+.grid .reviewCell [data-reviewed] svg { color: #218044; }
+
+.grid [data-editing=true] { padding: 0; }
+.grid [data-editing=true] > form { padding: 0; width: 100%; }
+.grid [data-editor-cell=payee][data-editing=true] > form::before { content: ""; position: absolute; inset: 0; }
+.grid [data-editor-cell=payee][data-editing=true] input[role=combobox] { position: relative; min-width: 0; }
+/* Anchor the growing note editor to its cell without sizing the row. */
+.grid [data-editor-cell=note][data-editing=true] > form {
+  position: absolute;
+  inset: 0 0 auto;
+  min-block-size: 100%;
+  z-index: 3;
+  background: var(--edit-background);
+}
+.grid [data-editor-cell=note][data-editing=true] textarea {
+  field-sizing: content;
+  min-width: 0;
+  max-block-size: 40dvh;
+  resize: none;
+}

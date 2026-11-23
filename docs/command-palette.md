@@ -23,17 +23,19 @@ The table loads a full calendar month in one continuous list. Previous, next, an
 
 Press `F` to open Filter. **Clear filters** or `Ctrl+F` clears facets and search. Show active filters as removable chips. Different facets combine with AND. The category facet matches any selected category. In a multi-value filter picker, Enter replaces that facet with the highlighted value and closes. **⌘Enter** or **Ctrl+Enter** toggles the value and keeps the picker open. Provide a visible toggle and **Done** button.
 
-**Search** searches payee names, original descriptors, and notes in the current month. **Search a wider date range** expands the scope explicitly. Show the active date range and filters with the results. **Find similar transactions** starts from a single transaction's payee and ranks normalized payee matches first.
+The URL stores active filter values, search text, and explicit sort. Back and Forward restore filter and sort changes.
+
+**Search** searches payee names, original descriptors, and notes in the current month. **Search a wider date range** expands the scope explicitly. Show the active date range and filters with the results.
 
 ## Columns and sorting
 
-The grid shows the selection checkbox, Date, Category, Payee, Amount, Note, Tags, and Review in that order. Review uses a green check for reviewed rows and a gray circle for unreviewed rows. A gray check labels the compact Review heading visually. The heading and status have accessible labels. Amount shows icons for split transactions and transactions linked to a recurring item. Empty fields display **No note** or **No tags**. Cells stay on one line and long text shows an ellipsis.
+The grid shows the selection checkbox, Date, Category, Payee, Amount, Note, Tags, and Review in that order. Review uses a green circled check for reviewed rows and a gray circle for unreviewed rows. A gray check labels the compact Review heading visually. The heading and status have accessible labels. Amount shows icons for split transactions and transactions linked to a recurring item. Empty Note and Tags cells are blank and can still open their editors. The header sticks to the top of the viewport as the page scrolls. Cells stay on one line and long text shows an ellipsis.
 
 Click a data column header to sort and click it again to reverse the direction. **Sort by** in Command K offers one action per column, with `S` opening it directly. Choose a new column to sort in ascending order, or choose the current column to reverse its direction. The default is newest first, and search results default to relevance. An explicit column sort applies across months and search results. **Search relevance** in the sort menu restores relevance ordering while searching. Amounts sort in the budget currency. Sorting preserves selected row IDs and keyboard range selection follows the new order.
 
 ## Monthly budget
 
-The budget panel shows category groups with expandable child rows. A gray striped bar marks a category without a budget target. Group rows use Lunch Money’s group totals when available and otherwise roll up their children.
+The budget panel stays on the right as the desktop workspace scrolls and has its own scrollbar. Press `]` or use the **Budget** button to toggle it. The panel shows category groups with expandable child rows. A gray striped bar marks a category without a budget target. Group rows use Lunch Money’s group totals when available and otherwise roll up their children.
 
 ## Grid focus and selection
 
@@ -61,7 +63,7 @@ Field editors and the palette handle their own typing and navigation. Suspend di
 
 ## Command palette
 
-Open the palette with **⌘K** or **Ctrl+K**. Table commands are always available on the Transactions screen. They include **Filter**, **Sort by**, **Search**, month navigation, and **Undo last edit** or **Redo last edit** when available.
+Open the palette with **⌘K** or **Ctrl+K**. Press **Ctrl+N** or **Ctrl+P** to move down or up through commands and picker results. Table commands are always available on the Transactions screen. They include **Filter**, **Sort by**, **Search**, month navigation, and **Undo last edit** or **Redo last edit** when available.
 
 Show transaction actions above table commands when visible rows are selected or a row has focus. A visible selection takes precedence. With no selection, use the focused row. Capture the target IDs before opening an editor and keep them through nested pickers. Show the affected count in bulk action labels and editors.
 
@@ -75,14 +77,14 @@ Closing the palette or editor restores focus to the invoking control or grid cel
 
 ## Transaction edits
 
-**Change category** appears first in the contextual action list. With a single target, the palette also offers **Open transaction** and **Find similar transactions**.
+**Change category** appears first in the contextual action list.
 
 | Action | Direct key | One focused or selected transaction | Multiple selected transactions |
 | --- | --- | --- | --- |
 | **Change category…** | `C` | Open a searchable dropdown at the target row’s Category cell. | Open the category picker in the palette and apply one category to all targets. |
 | **Edit payee…** | `P` | Select the payee text in the cell and show a floating list of matching payees from loaded transactions. Choose a suggestion or leave the field to save a new name. | Open **Set payee…** in the palette and apply one replacement payee. |
 | **Set transaction date…** | `D` | Open the date editor at the target row’s Date cell, with the existing date. | Open the date picker in the palette. Show the chosen date and affected count before applying. |
-| **Set note…** | `N` | Edit the note directly in the Note cell. | Open **Replace notes…** in the palette. Start blank if notes differ. Emptying an edited field clears the notes. |
+| **Set note…** | `N` | Select the existing note text in the Note cell. The editor grows over the grid as the text wraps. | Open **Replace notes…** in the palette. Start blank if notes differ. Emptying an edited field clears the notes. |
 | **Set tags…** | `T` | Open a searchable tag multi-select at the target row’s Tags cell. | Open the same picker in the palette with mixed tag states. |
 | **Mark reviewed** / **Mark unreviewed** | `R` | The palette shows the action that changes the target's status. The direct key toggles the target row, including a split child. | Show each action that changes eligible rows in the selection. Show affected counts. `R` marks eligible unreviewed rows reviewed first, or marks eligible reviewed rows unreviewed if all are reviewed. |
 
@@ -104,10 +106,9 @@ A toast confirms successful writes, undo, and redo. Each successful action is on
 ## Open UX decisions
 
 - **Review loop.** Decide where focus should move after reviewing a transaction that stays visible.
-- **Transaction details.** Define which fields appear in the details view and which can be edited there.
 - **Selection controls and navigation bounds.** Define the header checkbox scope and what happens at the first or last visible row during navigation.
 - **Feedback and recovery.** Design loading, empty, saving, success, and error states. Decide how to present partial success across several API writes. Decide whether history survives a reload and how conflicts appear in the UI.
-- **Search and budget context.** Define the wider-date search picker, how similar search interacts with active filters, and what the budget panel shows when a calendar month overlaps different budget periods.
+- **Search and budget context.** Define the wider-date search picker and what the budget panel shows when a calendar month overlaps different budget periods.
 - **Accessibility and input parity.** Verify how focus, selected counts, mixed states, and save outcomes are announced. Define the equivalent pointer and touch flows, plus shortcut discovery and an option to turn off single-letter shortcuts.
 
 Follow-on filters include **Amount**, **Recurring item**, and **Has attachment**. Follow-on edits include **Edit amount or currency**, **Move to account**, **Link or unlink recurring item**, and **Attach receipt** for eligible transactions. Account and amount edits depend on synced-account settings. **Split transaction** and **Group selected transactions** have dedicated flows that show the resulting parent and children.
@@ -118,7 +119,7 @@ Follow-on filters include **Amount**, **Recurring item**, and **Has attachment**
 | --- | --- |
 | Month navigation and review filters | Use `GET /transactions` with `start_date`, `end_date`, and `status`. Fetch API pages behind the scenes so table search and counts cover the full requested range. Request posted transactions and exclude pending rows from the transaction list. |
 | Category, tag, account, and recurring filters | Load choices from `/categories`, `/tags`, `/manual_accounts`, `/plaid_accounts`, and `/recurring_items`. Transaction filters accept a single ID per parameter. Use a single API value where it matches the request, and apply multi-value facets over the full paginated range within the other compatible filters. Category groups expand to their member categories for local filtering. |
-| Search and similar transactions | Search locally within the fetched date range. The transaction list exposes `payee`, `original_name`, and `notes` in the rows, with no free-text or similarity query parameter. Complete pagination for the requested scope before reporting a definitive result count or empty state. |
+| Search | Search locally within the fetched date range. The transaction list exposes `payee`, `original_name`, and `notes` in the rows, with no free-text query parameter. Complete pagination for the requested scope before reporting a definitive result count or empty state. |
 | Amount and attachment filters | Evaluate these over the fetched rows. Define the currency basis before comparing amounts across currencies. Request `include_files` when attachment data is needed. |
 | Monthly budget panel | Read `GET /summary` for the date range and `GET /budgets/settings` for budget cadence. A calendar month can overlap multiple budget periods. Label the date range and use aligned periods for budget targets when the user’s cadence differs. |
 | Row edits and bulk edits | Use `PUT /transactions/{id}` for single rows and for split or grouped rows in a selection. Send ordinary rows through `PUT /transactions` in batches of up to 500. Send only the intended fields and preserve review status on unrelated edits. Use `additional_tag_ids` for add-only tag changes. When removing tags, calculate the complete `tag_ids` array for each changed transaction using its current tags. |

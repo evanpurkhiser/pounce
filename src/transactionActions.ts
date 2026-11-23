@@ -1,4 +1,4 @@
-import {CalendarDays, Check, Circle, Folder, NotebookPen, Tags, UserRound, type LucideIcon} from 'lucide-react';
+import {CalendarDays, Circle, CircleCheck, Folder, NotebookPen, Tags, UserRound, type LucideIcon} from 'lucide-react';
 import type {LetterKey} from '@tanstack/react-hotkeys';
 import type {Row} from './api';
 
@@ -28,7 +28,7 @@ export function editTitle(field: Field, multiple: boolean) {
 
 export type ReviewStatus = 'reviewed' | 'unreviewed';
 
-export const reviewIcons = {reviewed: Check, unreviewed: Circle};
+export const reviewIcons = {reviewed: CircleCheck, unreviewed: Circle};
 export const reviewShortcut = 'R';
 export const reviewStatuses = ['reviewed', 'unreviewed'] as const;
 

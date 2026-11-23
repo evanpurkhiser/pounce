@@ -1,0 +1,12 @@
+.controls { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-bottom: .55rem; }
+.actionIcon { width: 1em; height: 1em; flex: none; vertical-align: -.12em; }
+.visuallyHidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.choice { padding: .38rem .45rem; display: flex; align-items: center; gap: .5rem; border: 1px solid transparent; border-radius: 4px; cursor: default; }
+.choice:is([data-highlighted], [aria-selected=true][cmdk-item]) { border-color: var(--focus); background: var(--selected); }
+.choice > small, .choice > kbd { margin-left: auto; color: #4b5563; }
+.editor { display: grid; padding: .75rem; justify-items: start; gap: .6rem; }
+.editor label:has(:is(input:not([type=checkbox]), textarea)) { display: grid; width: 100%; gap: .25rem; }
+.editor textarea { resize: vertical; width: 100%; }
+.descriptionList { display: grid; grid-template-columns: max-content 1fr; gap: .35rem .75rem; margin: .5rem 0; }
+.descriptionList dt { font-weight: 650; }
+.descriptionList dd { margin: 0; }

@@ -1,7 +1,7 @@
-import {accountKey, type Metadata, type Patch, type Row} from './api';
-import {CategoryPicker, DateEditor, Details, NoteEditor, PayeeEditor, TagPicker} from './Editors';
-import {categoryName} from './sorting';
+import type {Metadata, Patch, Row} from './api';
+import {CategoryPicker, DateEditor, NoteEditor, PayeeEditor, TagPicker} from './Editors';
 import type {Field} from './transactionActions';
+import ui from './ui.module.css';
 
 export type RowPatch = Patch | ((row: Row) => Patch);
 
@@ -19,7 +19,7 @@ export function TransactionEditor({field, rows, metadata, payees, save, close}: 
   close: () => void;
 }) {
   if (!rows.length) {
-    return <p className="editor">The target rows are unavailable for editing.</p>;
+    return <p className={ui.editor}>The target rows are unavailable for editing.</p>;
   }
 
   switch (field) {
@@ -41,17 +41,9 @@ export function TransactionEditor({field, rows, metadata, payees, save, close}: 
       return <PayeeEditor value={commonValue(rows.map(row => row.payee))} payees={payees}
         apply={payee => save('Changed payee', {payee})} cancel={close} />;
     case 'note': {
-      if (rows.length !== 1) {
-        const notes = rows.map(row => row.notes ?? '');
-        return <NoteEditor value={commonValue(notes)} mixed={new Set(notes).size > 1}
-          apply={value => save('Changed notes', {notes: value})} />;
-      }
-
-      const [row] = rows;
-      const account = accountKey(row);
-      return <Details row={row} note category={categoryName(row, metadata)}
-        account={metadata?.accounts.find(item => item.id === account)?.label ?? account}
-        apply={notes => save('Changed note', {notes})} />;
+      const notes = rows.map(row => row.notes ?? '');
+      return <NoteEditor value={commonValue(notes)} mixed={new Set(notes).size > 1}
+        apply={value => save(rows.length === 1 ? 'Changed note' : 'Changed notes', {notes: value})} />;
     }
   }
 }

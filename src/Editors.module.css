@@ -1,0 +1,11 @@
+.payeePositioner { z-index: 8; }
+.payeePositioner .suggestions { min-width: var(--anchor-width); max-width: min(24rem, calc(100vw - 1rem)); max-height: min(12rem, var(--available-height)); overflow: auto; }
+.suggestions, .calendarPopup { background: white; border: 1px solid var(--line); box-shadow: 0 4px 12px #10182829; padding: .25rem; border-radius: 4px; z-index: 10; }
+.datePicker { display: grid; gap: .25rem; }
+.dateInput { display: flex; align-items: center; gap: .25rem; }
+.dateField { display: inline-flex; align-items: center; gap: .07rem; padding: .3rem; border: 1px solid var(--line); border-radius: 4px; }
+.dateSegment { padding: .1rem; }
+.calendar header { display: flex; align-items: center; justify-content: space-between; }
+.calendar h2 { margin: 0 .4rem; font-size: .9rem; }
+.calendarCell { padding: .25rem; text-align: center; cursor: pointer; }
+.calendarCell[data-selected] { background: var(--selected); }

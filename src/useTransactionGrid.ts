@@ -223,7 +223,7 @@ export function useTransactionGrid(rows: Row[], suspended: boolean, fallback: Re
       }
       case 'ArrowLeft':
       case 'ArrowRight':
-        if (!row) return;
+        if (!row || (event.shiftKey && target.matches('[aria-keyshortcuts~="Shift+ArrowLeft"]'))) return;
         event.preventDefault();
         if (cell) focusCell(row, cell.cellIndex + (event.key === 'ArrowRight' ? 1 : -1));
         else focusCell(row, event.key === 'ArrowRight' ? 0 : row.cells.length - 1);

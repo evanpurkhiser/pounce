@@ -1,11 +1,12 @@
 import {Autocomplete} from '@base-ui/react/autocomplete';
-import {Tabs} from '@base-ui/react/tabs';
 import {parseDate, type CalendarDate} from '@internationalized/date';
 import {Button, Calendar, CalendarCell, CalendarGrid, DateInput, DatePicker, DateSegment, Dialog, Group, Heading, Label, Popover} from 'react-aria-components';
 import {useRef, useState, type FocusEvent, type KeyboardEvent, type PointerEvent, type RefObject} from 'react';
 import {type Choice, type Range, type Row} from './api';
 import {Picker, useInitialFocus} from './Palette';
 import {rank} from './search';
+import styles from './Editors.module.css';
+import ui from './ui.module.css';
 
 type TextEditorProps = {
   value: string;
@@ -73,7 +74,7 @@ export function PayeeEditor({payees, ...editor}: TextEditorProps & {payees: stri
   const input = useInitialFocus<HTMLInputElement>(true);
   const suggestions = rank(payees.map(label => ({label})), draft).slice(0, 12).map(item => item.label);
 
-  return <form className="editor payee-editor" {...bindings} onSubmit={event => {
+  return <form className={ui.editor} {...bindings} onSubmit={event => {
     event.preventDefault();
     finish(false);
   }}>
@@ -85,10 +86,10 @@ export function PayeeEditor({payees, ...editor}: TextEditorProps & {payees: stri
       }}>
       <Autocomplete.Input aria-label="Payee" ref={input} />
       <Autocomplete.Portal>
-        <Autocomplete.Positioner align="start" sideOffset={4} className="payee-positioner">
-          <Autocomplete.Popup ref={popup} className="suggestions">
+        <Autocomplete.Positioner align="start" sideOffset={4} className={styles.payeePositioner}>
+          <Autocomplete.Popup ref={popup} className={styles.suggestions}>
             <Autocomplete.List>
-              {(payee: string) => <Autocomplete.Item key={payee} value={payee} className="choice">{payee}</Autocomplete.Item>}
+              {(payee: string) => <Autocomplete.Item key={payee} value={payee} className={ui.choice}>{payee}</Autocomplete.Item>}
             </Autocomplete.List>
           </Autocomplete.Popup>
         </Autocomplete.Positioner>
@@ -100,17 +101,17 @@ export function PayeeEditor({payees, ...editor}: TextEditorProps & {payees: stri
 function DateControl({label, value, setValue, autoFocus}: {
   label: string; value: CalendarDate | null; setValue: (date: CalendarDate | null) => void; autoFocus?: boolean;
 }) {
-  return <DatePicker value={value} onChange={setValue} autoFocus={autoFocus} className="date-picker">
+  return <DatePicker value={value} onChange={setValue} autoFocus={autoFocus} className={styles.datePicker}>
     <Label>{label}</Label>
-    <Group className="date-input">
-      <DateInput>{segment => <DateSegment segment={segment} />}</DateInput>
+    <Group className={styles.dateInput}>
+      <DateInput className={styles.dateField}>{segment => <DateSegment className={styles.dateSegment} segment={segment} />}</DateInput>
       <Button aria-label={'Open calendar for ' + label}>▦</Button>
     </Group>
-    <Popover className="calendar-popup">
+    <Popover className={styles.calendarPopup}>
       <Dialog>
-        <Calendar>
+        <Calendar className={styles.calendar}>
           <header><Button slot="previous" aria-label="Previous calendar month">‹</Button><Heading/><Button slot="next" aria-label="Next calendar month">›</Button></header>
-          <CalendarGrid>{date => <CalendarCell date={date} />}</CalendarGrid>
+          <CalendarGrid>{date => <CalendarCell className={styles.calendarCell} date={date} />}</CalendarGrid>
         </Calendar>
       </Dialog>
     </Popover>
@@ -119,7 +120,7 @@ function DateControl({label, value, setValue, autoFocus}: {
 
 export function DateEditor({value, apply}: {value: string; apply: (value: string) => void}) {
   const [date, setDate] = useState<CalendarDate | null>(value ? parseDate(value) : null);
-  return <form className="editor" onSubmit={event => { event.preventDefault(); if (date) apply(date.toString()); }}>
+  return <form className={ui.editor} onSubmit={event => { event.preventDefault(); if (date) apply(date.toString()); }}>
     <DateControl label="Transaction date" value={date} setValue={setDate} autoFocus />
     <button type="submit" disabled={!date}>Apply date</button>
   </form>;
@@ -130,7 +131,7 @@ export function RangeEditor({range, apply}: {range: Range; apply: (range: Range)
   const [end, setEnd] = useState<CalendarDate | null>(parseDate(range.end));
   const valid = start && end && start.compare(end) <= 0;
 
-  return <form className="editor" onSubmit={event => {
+  return <form className={ui.editor} onSubmit={event => {
     event.preventDefault();
     if (valid) apply({start: start.toString(), end: end.toString()});
   }}>
@@ -142,29 +143,13 @@ export function RangeEditor({range, apply}: {range: Range; apply: (range: Range)
 
 export function NoteEditor({inline, mixed, ...editor}: TextEditorProps & {inline?: boolean; mixed?: boolean}) {
   const {draft, update, bindings} = useTextDraft(editor, {allowEmpty: true, mixed});
-  const ref = useInitialFocus<HTMLTextAreaElement>();
-  return <form className="editor note-editor" {...bindings} onSubmit={event => event.preventDefault()}>
-    <label>{inline ? <span className="visually-hidden">Note</span> : 'Note'}
+  const ref = useInitialFocus<HTMLTextAreaElement>(inline);
+  return <form className={ui.editor} {...bindings} onSubmit={event => event.preventDefault()}>
+    <label>{inline ? <span className={ui.visuallyHidden}>Note</span> : 'Note'}
       <textarea ref={ref} rows={inline ? 1 : 5} value={draft} placeholder={mixed ? 'Mixed notes' : undefined}
         onChange={event => update(event.target.value)} />
     </label>
   </form>;
-}
-
-export function Details({row, note, apply, category, account}: {
-  row: Row; note: boolean; apply?: (value: string) => void; category: string; account: string;
-}) {
-  return <Tabs.Root defaultValue={note ? 'notes' : 'details'} className="details">
-    <Tabs.List aria-label="Transaction details">
-      <Tabs.Tab value="details">Details</Tabs.Tab><Tabs.Tab value="notes">Notes</Tabs.Tab>
-    </Tabs.List>
-    <Tabs.Panel value="details">
-      <dl><dt>Payee</dt><dd>{row.payee}</dd><dt>Original descriptor</dt><dd>{row.original_name || '—'}</dd>
-        <dt>Date</dt><dd>{row.date}</dd><dt>Category</dt><dd>{category}</dd><dt>Account</dt><dd>{account}</dd>
-        <dt>Review status</dt><dd>{row.status.replaceAll('_', ' ')}</dd></dl>
-    </Tabs.Panel>
-    <Tabs.Panel value="notes">{apply ? <NoteEditor value={row.notes ?? ''} apply={apply} /> : <p>{row.notes || 'No note.'}</p>}</Tabs.Panel>
-  </Tabs.Root>;
 }
 
 export function CategoryPicker({rows, choices, apply}: {
