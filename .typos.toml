@@ -1,0 +1,2 @@
+[default]
+extend-ignore-re = ['\bresturaunts\b', 'déjeuner sur le pouce']
