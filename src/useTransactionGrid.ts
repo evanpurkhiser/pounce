@@ -328,21 +328,34 @@ export function useTransactionGrid(
         move(event.key === 'PageDown' ? 1 : -1, event.shiftKey, distance);
         break;
       }
+      case 'Tab':
       case 'ArrowLeft':
-      case 'ArrowRight':
+      case 'ArrowRight': {
+        const tabbing = event.key === 'Tab';
         if (
           !row ||
-          (event.shiftKey && target.matches('[aria-keyshortcuts~="Shift+ArrowLeft"]'))
+          (tabbing && !row.hasAttribute('data-row-id')) ||
+          (!tabbing &&
+            event.shiftKey &&
+            target.matches('[aria-keyshortcuts~="Shift+ArrowLeft"]'))
         ) {
           return;
         }
-        event.preventDefault();
-        if (cell) {
-          focusCell(row, cell.cellIndex + (event.key === 'ArrowRight' ? 1 : -1));
-        } else {
-          focusCell(row, event.key === 'ArrowRight' ? 0 : row.cells.length - 1);
+
+        const forward = tabbing ? !event.shiftKey : event.key === 'ArrowRight';
+        const index = cell
+          ? cell.cellIndex + (forward ? 1 : -1)
+          : forward
+            ? 0
+            : row.cells.length - 1;
+        if (tabbing && !row.cells[index]) {
+          return;
         }
+
+        event.preventDefault();
+        focusCell(row, index);
         break;
+      }
       case 'Home':
       case 'End': {
         const first = event.key === 'Home';

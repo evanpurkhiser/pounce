@@ -9,9 +9,9 @@
 }
 .suggestions,
 .calendarPopup {
-  background: white;
-  border: 1px solid var(--line);
-  box-shadow: 0 4px 12px #10182829;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 12px var(--suggestion-shadow);
   padding: 0.25rem;
   border-radius: 4px;
   z-index: 10;
@@ -30,7 +30,7 @@
   align-items: center;
   gap: 0.07rem;
   padding: 0.3rem;
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   border-radius: 4px;
 }
 .dateSegment {
@@ -51,5 +51,5 @@
   cursor: pointer;
 }
 .calendarCell[data-selected] {
-  background: var(--selected);
+  background: var(--selection);
 }

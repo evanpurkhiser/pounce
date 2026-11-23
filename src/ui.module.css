@@ -29,12 +29,12 @@
 }
 .choice:is([data-highlighted], [aria-selected='true'][cmdk-item]) {
   border-color: var(--focus);
-  background: var(--selected);
+  background: var(--selection);
 }
 .choice > small,
 .choice > kbd {
   margin-left: auto;
-  color: #4b5563;
+  color: var(--text-muted);
 }
 .editor {
   display: grid;

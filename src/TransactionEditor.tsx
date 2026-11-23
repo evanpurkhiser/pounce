@@ -80,6 +80,7 @@ export function TransactionEditor({
         <NoteEditor
           value={commonValue(notes)}
           mixed={new Set(notes).size > 1}
+          cancel={close}
           apply={value =>
             save(rows.length === 1 ? 'Changed note' : 'Changed notes', {notes: value})
           }

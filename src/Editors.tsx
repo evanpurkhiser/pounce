@@ -54,8 +54,12 @@ function useTextDraft(
   }
 
   function finish(leave: boolean, confirmed = pending.current) {
-    pending.current = undefined;
     const next = confirmed?.trim();
+    if (!leave && next === '' && !options?.allowEmpty) {
+      return;
+    }
+
+    pending.current = undefined;
     const changed =
       next !== undefined &&
       (options?.allowEmpty || next.length > 0) &&
@@ -64,13 +68,15 @@ function useTextDraft(
       onLeave(changed ? next : undefined);
     } else if (changed) {
       apply(next);
+    } else if (!leave) {
+      cancel?.();
     }
   }
 
   return {
     draft,
     update,
-    finish,
+    confirm: (confirmed?: string) => finish(false, confirmed),
     bindings: {
       onPointerDown:
         onLeave &&
@@ -118,7 +124,7 @@ function useTextDraft(
 
 export function PayeeEditor({payees, ...editor}: TextEditorProps & {payees: string[]}) {
   const popup = useRef<HTMLDivElement>(null);
-  const {draft, update, finish, bindings} = useTextDraft(editor, {popup});
+  const {draft, update, confirm, bindings} = useTextDraft(editor, {popup});
   const [showSuggestions, setShowSuggestions] = useState(true);
   const input = useInitialFocus<HTMLInputElement>(true);
   const suggestions = rank(
@@ -134,7 +140,7 @@ export function PayeeEditor({payees, ...editor}: TextEditorProps & {payees: stri
       {...bindings}
       onSubmit={event => {
         event.preventDefault();
-        finish(false);
+        confirm(draft);
       }}
     >
       <Autocomplete.Root
@@ -147,7 +153,7 @@ export function PayeeEditor({payees, ...editor}: TextEditorProps & {payees: stri
           update(name);
           setShowSuggestions(true);
           if (event.reason === 'item-press') {
-            finish(false, name);
+            confirm(name);
           }
         }}
       >
@@ -170,6 +176,7 @@ export function PayeeEditor({payees, ...editor}: TextEditorProps & {payees: stri
           </Autocomplete.Positioner>
         </Autocomplete.Portal>
       </Autocomplete.Root>
+      <button type="submit" hidden />
     </form>
   );
 }
@@ -277,12 +284,17 @@ export function RangeEditor({
   );
 }
 
+const singleLineNote = (value: string) => value.replace(/[\r\n]+/g, ' ');
+
 export function NoteEditor({
   inline,
   mixed,
   ...editor
 }: TextEditorProps & {inline?: boolean; mixed?: boolean}) {
-  const {draft, update, bindings} = useTextDraft(editor, {allowEmpty: true, mixed});
+  const {draft, update, confirm, bindings} = useTextDraft(
+    {...editor, value: singleLineNote(editor.value)},
+    {allowEmpty: true, mixed},
+  );
   const ref = useInitialFocus<HTMLTextAreaElement>(inline);
   return (
     <form className={ui.editor} {...bindings} onSubmit={event => event.preventDefault()}>
@@ -293,7 +305,15 @@ export function NoteEditor({
           rows={inline ? 1 : 5}
           value={draft}
           placeholder={mixed ? 'Mixed notes' : undefined}
-          onChange={event => update(event.target.value)}
+          onChange={event => update(singleLineNote(event.target.value))}
+          onKeyDown={event => {
+            if (event.key !== 'Enter' || event.nativeEvent.isComposing) {
+              return;
+            }
+
+            event.preventDefault();
+            confirm();
+          }}
         />
       </label>
     </form>

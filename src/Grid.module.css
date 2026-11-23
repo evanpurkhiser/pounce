@@ -1,5 +1,5 @@
 .grid {
-  --grid-rule: 1px solid #e7e9ec;
+  --grid-rule: 1px solid var(--grid-divider);
   display: grid;
   grid-template-columns:
     2rem max-content var(--category-width, max-content)
@@ -8,8 +8,8 @@
   width: 100%;
   min-width: 760px;
   isolation: isolate;
-  background: white;
-  border: 1px solid var(--line);
+  background: var(--surface);
+  border: 1px solid var(--border);
   font-size: 0.94rem;
   text-align: left;
 }
@@ -39,15 +39,15 @@
   position: sticky;
   inset-block-start: 0;
   z-index: 4;
-  background: #eff1f3;
+  background: var(--table-heading);
 }
 .grid tr:focus-within {
   position: relative;
-  background: #eff5ff;
+  background: var(--row-focus-surface);
   outline: none;
 }
 .grid tr[aria-selected='true'] {
-  background: var(--selected);
+  background: var(--selection);
 }
 /* Center the focus lines on the row dividers. */
 .grid tr:focus-within::after {
@@ -71,9 +71,9 @@
   place-items: center;
   width: 1.05rem;
   height: 1.05rem;
-  border: 1px solid #7d8793;
+  border: 1px solid var(--checkbox-border);
   border-radius: 3px;
-  background: white;
+  background: var(--surface);
   cursor: pointer;
 }
 .gridCheckbox input {
@@ -93,7 +93,7 @@
   display: block;
   width: 0.8rem;
   height: 0.8rem;
-  color: white;
+  color: var(--on-focus);
   pointer-events: none;
 }
 .gridCheckbox:has(:checked, :indeterminate) {
@@ -114,7 +114,7 @@
   justify-content: space-between;
 }
 .amountIndicators {
-  color: #4b5563;
+  color: var(--text-muted);
 }
 .cellAction,
 .grid [data-editing='true'] :is(input[role='combobox'], textarea) {
@@ -144,12 +144,12 @@
   font-weight: 650;
 }
 .editCell {
-  --cell-focus-background: #fff3e5;
-  --cell-focus-border: #c35113;
+  --cell-focus-background: var(--edit-surface);
+  --cell-focus-border: var(--edit-border);
 }
 td.amount {
-  --cell-focus-background: #fff0f0;
-  --cell-focus-border: #b93332;
+  --cell-focus-background: var(--readonly-surface);
+  --cell-focus-border: var(--readonly-border);
 }
 .editCell:is(
   :focus-within,
@@ -183,7 +183,7 @@ td.amount:focus-visible {
   cursor: pointer;
 }
 .grid th:has(.sortButton):hover {
-  background: #e5eaf2;
+  background: var(--table-heading-hover);
 }
 .sortButton {
   display: block;
@@ -213,11 +213,11 @@ td.amount:focus-visible {
   touch-action: none;
 }
 .resizeHandle:hover {
-  background: #c6d1df;
+  background: var(--resize-hover);
 }
 .sortIndicator {
   margin-inline-start: 0.35rem;
-  color: #596579;
+  color: var(--sort-indicator);
 }
 .grid th[aria-sort] .sortIndicator {
   color: var(--focus);
@@ -249,10 +249,10 @@ td.amount:focus-visible {
   font-size: 0.8em;
 }
 .grid .reviewCell svg {
-  color: #687482;
+  color: var(--review-pending);
 }
 .grid .reviewCell [data-reviewed] svg {
-  color: #218044;
+  color: var(--positive);
 }
 
 .grid [data-editing='true'] {

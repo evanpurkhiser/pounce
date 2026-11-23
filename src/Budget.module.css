@@ -5,8 +5,8 @@
   max-block-size: 100dvh;
   overflow-y: auto;
   overscroll-behavior-y: contain;
-  padding-inline-start: 0.8rem;
-  background: white;
+  padding: 1.2rem clamp(1rem, 1.5vw, 1.3rem);
+  background: var(--surface);
 }
 .budgetItem {
   margin-top: 0.35rem;
@@ -18,7 +18,7 @@
 }
 .budgetChildren {
   margin-left: 0.45rem;
-  border-left: 1px solid var(--line);
+  border-left: 1px solid var(--border);
   padding-left: 0.7rem;
 }
 .budgetItem summary {
@@ -62,7 +62,7 @@
 .budget meter {
   appearance: none;
   height: 0.55rem;
-  background: #edf0f2;
+  background: var(--meter-track);
   overflow: hidden;
 }
 @supports selector(meter::-webkit-meter-bar) {
@@ -74,19 +74,23 @@
 .budget meter::-webkit-meter-bar {
   border: 0;
   border-radius: 0.2rem;
-  background: #edf0f2;
+  background: var(--meter-track);
 }
 .budget meter::-webkit-meter-optimum-value {
-  background: #218044;
+  background: var(--positive);
   border-radius: 0.2rem;
 }
 .budget meter::-moz-meter-bar {
-  background: #218044;
+  background: var(--positive);
   border-radius: inherit;
 }
 .budgetUnset {
   height: 0.55rem;
-  background: repeating-linear-gradient(135deg, #fff 0 4px, #e3e6ea 4px 8px);
+  background: repeating-linear-gradient(
+    135deg,
+    var(--surface) 0 4px,
+    var(--meter-stripe) 4px 8px
+  );
 }
 
 @media (width > 950px) {
@@ -97,7 +101,8 @@
   .budget {
     position: fixed;
     inset-block: 3.65rem 0;
-    inset-block-start: anchor(--app-header bottom, 3.65rem);
+    position-anchor: --app-header;
+    inset-block-start: max(0px, anchor(bottom, 3.65rem));
     inset-inline-end: 0;
     inline-size: 20rem;
     inline-size: anchor-size(--budget-column inline, 20rem);

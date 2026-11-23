@@ -130,7 +130,7 @@ export function App() {
   return (
     <QueryClientProvider client={connection.session.query}>
       <Workspace key={connection.id} {...connection} connect={connect} />
-      <Toaster richColors position="bottom-right" />
+      <Toaster theme="system" richColors position="bottom-right" />
     </QueryClientProvider>
   );
 }
@@ -649,8 +649,10 @@ function Workspace({
           body: (
             <div className={ui.editor}>
               <dl className={ui.descriptionList}>
-                <dt>Move focus</dt>
+                <dt>Move between rows</dt>
                 <dd>↑ / ↓ or J / K</dd>
+                <dt>Move between columns</dt>
+                <dd>← / → or Tab / Shift+Tab</dd>
                 <dt>First / last row</dt>
                 <dd>G G / Shift+G</dd>
                 <dt>Select row or range</dt>

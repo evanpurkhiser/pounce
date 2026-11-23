@@ -192,7 +192,7 @@ test('the inline note editor grows over the grid without moving rows', async ({p
   ).toBe('Produce and bread');
   await expect(editor).toHaveCSS('resize', 'none');
   const singleLine = (await editor.boundingBox())!;
-  await editor.fill('First line\nSecond line');
+  await editor.fill('A long note that wraps over multiple lines as it grows. '.repeat(6));
   const expanded = (await editor.boundingBox())!;
   const editing = (await target.boundingBox())!;
   const mark = (await checkbox.boundingBox())!;
@@ -676,6 +676,30 @@ test('bulk payee and note edits save when leaving the field', async ({page}) => 
   }
 });
 
+test('Enter saves notes and pasted line breaks become spaces', async ({page}) => {
+  await ready(page);
+  const first = row(page, 1);
+  const noteCell = (id: number) => row(page, id).locator('[data-editor-cell="note"]');
+
+  await first.focus();
+  await page.keyboard.press('N');
+  const inline = noteCell(1).getByRole('textbox', {name: 'Note'});
+  await inline.fill('Produce\nand bread');
+  await expect(inline).toHaveValue('Produce and bread');
+  await page.keyboard.press('Enter');
+  await expect(noteCell(1)).toHaveText('Produce and bread');
+  await expect(first).toBeFocused();
+
+  await page.keyboard.press('Shift+J');
+  await page.keyboard.press('N');
+  const bulk = dialog(page).getByRole('textbox', {name: 'Note'});
+  await bulk.fill('Joint\nnote');
+  await page.keyboard.press('Shift+Enter');
+  await expect(dialog(page)).toHaveCount(0);
+  await expect(noteCell(1)).toHaveText('Joint note');
+  await expect(noteCell(2)).toHaveText('Joint note');
+});
+
 test('posted rows are visible on arrival and J and K enter the grid', async ({page}) => {
   await ready(page);
   await expect(row(page, 8)).toHaveCount(0);
@@ -708,10 +732,30 @@ test('grid has one tab stop and preserves row and cell focus through keyboard na
   await page.keyboard.press('Escape');
   await expect(row(page, 2)).toBeFocused();
 
+  const second = row(page, 2);
+  const checkbox = second.getByRole('checkbox');
+  const date = second.getByRole('button', {name: /Change date/});
+  const review = second.locator('[data-editor-cell="review"]');
+
+  await page.keyboard.press('Tab');
+  await expect(checkbox).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(date).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(checkbox).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(page.getByRole('button', {name: 'Budget', exact: true})).toBeFocused();
+
+  await page.keyboard.press('Tab');
+  await expect(checkbox).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(second).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(review).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(grid.locator(':focus')).toHaveCount(0);
   await page.keyboard.press('Shift+Tab');
-  await expect(row(page, 2)).toBeFocused();
+  await expect(review).toBeFocused();
   await expect(grid.locator('[tabindex="0"]')).toHaveCount(1);
 
   await row(page, 2).getByRole('checkbox').click();
@@ -1180,6 +1224,39 @@ test('tag picker pins current tags and keeps the same order while toggling', asy
   await expect(row(page, 1).locator('[data-editor-cell=note]')).toBeEmpty();
 });
 
+test('Enter saves typed payees in inline and bulk editors', async ({page}) => {
+  await ready(page);
+  const first = row(page, 1);
+  const inline = first.getByRole('combobox', {name: 'Payee'});
+
+  await first.focus();
+  await page.keyboard.press('P');
+  await inline.fill('Superior');
+  await expect(page.getByRole('option', {name: 'Superiority Burger'})).toBeVisible();
+  await page.keyboard.press('Enter');
+  await expect(
+    first.getByRole('button', {name: 'Edit payee for Superior'}),
+  ).toBeVisible();
+  await expect(first).toBeFocused();
+
+  await page.keyboard.press('P');
+  await expect(inline).toHaveValue('Superior');
+  await page.keyboard.press('Enter');
+  await expect(first).toBeFocused();
+
+  await page.keyboard.press('Shift+J');
+  await page.keyboard.press('P');
+  const bulk = dialog(page).getByRole('combobox', {name: 'Payee'});
+  await bulk.fill('Another merchant');
+  await page.keyboard.press('Enter');
+  await expect(dialog(page)).toBeHidden();
+  for (const id of [1, 2]) {
+    await expect(
+      row(page, id).getByRole('button', {name: 'Edit payee for Another merchant'}),
+    ).toBeVisible();
+  }
+});
+
 test('payee suggestions float below the input and can save a known payee', async ({
   page,
 }) => {
@@ -1263,10 +1340,23 @@ test('monthly budget stays pinned, scrolls independently, and toggles with ]', a
   expect(initial.x + initial.width).toBeCloseTo(width, 0);
   expect(initial.y + initial.height).toBeCloseTo(260, 0);
 
+  await page.evaluate(() => window.scrollTo(0, 16));
+  await expect
+    .poll(async () => Math.abs((await budget.boundingBox())!.y - (initial.y - 16)))
+    .toBeLessThan(1);
+  const partial = (await budget.boundingBox())!;
+  expect(partial.y + partial.height).toBeCloseTo(260, 0);
+
   await page.evaluate(() => window.scrollTo(0, 130));
+  await expect
+    .poll(async () => Math.abs((await budget.boundingBox())!.y))
+    .toBeLessThan(1);
   const pinned = (await budget.boundingBox())!;
+  expect(pinned.y + pinned.height).toBeCloseTo(260, 0);
   await page.evaluate(() => window.scrollTo(0, 190));
-  expect((await budget.boundingBox())!.y).toBeCloseTo(pinned.y, 0);
+  await expect
+    .poll(async () => Math.abs((await budget.boundingBox())!.y))
+    .toBeLessThan(1);
 
   const scroll = await page.evaluate(() => window.scrollY);
   await page.mouse.move(pinned.x + pinned.width / 2, pinned.y + pinned.height / 2);

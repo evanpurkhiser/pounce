@@ -103,7 +103,7 @@ and clearing the filter leaves previously hidden rows unselected.
 
 | Key                                            | Action                                                                                                                                                                            |
 | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Tab` / `Shift+Tab`                            | Enter or leave the grid at its last focused row or cell. First entry focuses the first row.                                                                                       |
+| `Tab` / `Shift+Tab`                            | Enter the grid at its last focus, or the first row on first entry. Within a row, move between columns and leave the grid at either edge.                                          |
 | `J` / `K`                                      | Move row focus down / up. A focused cell keeps its column as you move. From outside the grid, `J` focuses the first visible row and `K` focuses the last.                         |
 | `G` then `G` / `Shift+G`                       | Jump to the first / last visible row. Keep the focused column and current selection.                                                                                              |
 | Arrow keys                                     | Move between rows or cells. Left and Right enter or move across the current row. Up and Down preserve the column when a cell has focus.                                           |
@@ -200,6 +200,10 @@ Clicking a field or using its direct shortcut opens the single-row editor.
 Leaving an inline payee or note field saves the edit
 and keeps focus at its destination.
 Leaving a changed bulk text field saves and closes the editor.
+Enter saves a note or confirms a payee.
+For payees, Enter uses the highlighted suggestion when one is active
+or saves the typed name.
+Pasted line breaks become spaces.
 An empty note clears the note.
 Escape discards the draft and returns focus to the row.
 Bulk edit shortcuts focus the first input in the palette.

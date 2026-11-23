@@ -2,11 +2,87 @@
   font:
     15px/1.45 system-ui,
     sans-serif;
-  color: #1c222b;
-  background: #f6f7f8;
-  --line: #c7ccd2;
+  color-scheme: light dark;
+  color: var(--text);
+  background: var(--page);
+  --page: #f6f7f8;
+  --surface: white;
+  --text: #1c222b;
+  --text-muted: #4b5563;
+  --border: #c7ccd2;
+  --grid-divider: #e7e9ec;
   --focus: #174ed2;
-  --selected: #dce8ff;
+  --on-focus: white;
+  --selection: #dce8ff;
+  --button-hover: #eff3fa;
+  --shortcut-surface: #f1f3f5;
+  --filter-surface: #eaf0fc;
+  --selection-text: #42516a;
+  --warning-surface: #fff1d9;
+  --warning-border: #ca9430;
+  --table-heading: #eff1f3;
+  --row-focus-surface: #eff5ff;
+  --checkbox-border: #7d8793;
+  --edit-surface: #fff3e5;
+  --edit-border: #c35113;
+  --readonly-surface: #fff0f0;
+  --readonly-border: #b93332;
+  --table-heading-hover: #e5eaf2;
+  --resize-hover: #c6d1df;
+  --sort-indicator: #596579;
+  --review-pending: #687482;
+  --positive: #218044;
+  --meter-track: #edf0f2;
+  --meter-stripe: #e3e6ea;
+  --dialog-backdrop: #10182866;
+  --dialog-shadow: #10182840;
+  --popover-shadow: #10182830;
+  --suggestion-shadow: #10182829;
+  --badge-surface: #edf1f5;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page: #15191f;
+    --surface: #1c222b;
+    --text: #edf1f6;
+    --text-muted: #b6c0ce;
+    --border: #596576;
+    --grid-divider: #303947;
+    --focus: #93b6ff;
+    --on-focus: #121f36;
+    --selection: #273e65;
+    --button-hover: #2a3546;
+    --shortcut-surface: #272f3a;
+    --filter-surface: #293950;
+    --selection-text: #b8c9e5;
+    --warning-surface: #382a17;
+    --warning-border: #e6b35d;
+    --table-heading: #252d38;
+    --row-focus-surface: #22324b;
+    --checkbox-border: #8794a6;
+    --edit-surface: #3b2c22;
+    --edit-border: #ffb37b;
+    --readonly-surface: #3b272d;
+    --readonly-border: #ff9eab;
+    --table-heading-hover: #303c4d;
+    --resize-hover: #526b90;
+    --sort-indicator: #a7b7ce;
+    --review-pending: #a8b3c2;
+    --positive: #83d8a0;
+    --meter-track: #303947;
+    --meter-stripe: #3a4554;
+    --dialog-backdrop: #06090cb3;
+    --dialog-shadow: #0009;
+    --popover-shadow: #0008;
+    --suggestion-shadow: #0008;
+    --badge-surface: #2d3643;
+  }
+
+  ::placeholder {
+    color: var(--text-muted);
+    opacity: 1;
+  }
 }
 
 * {
@@ -28,10 +104,10 @@ textarea {
 button,
 input,
 textarea {
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 0.32rem 0.55rem;
-  background: white;
+  background: var(--surface);
 }
 button {
   cursor: pointer;
@@ -41,7 +117,7 @@ button:disabled {
   opacity: 0.55;
 }
 button:hover:not(:disabled) {
-  background: #eff3fa;
+  background: var(--button-hover);
 }
 :focus-visible,
 [data-focus-visible] {
@@ -52,8 +128,8 @@ kbd {
   font:
     0.85em ui-monospace,
     monospace;
-  background: #f1f3f5;
-  border: 1px solid var(--line);
+  background: var(--shortcut-surface);
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 0.05em 0.3em;
   white-space: nowrap;

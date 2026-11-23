@@ -104,7 +104,7 @@ function cellClass(id: string) {
   if (id === 'review') {
     return styles.reviewCell;
   }
-  if (id === 'date' || id === 'category' || id === 'payee' || id === 'note') {
+  if (isCellEditorField(id) || id === 'payee' || id === 'note') {
     return styles.editCell;
   }
 }
