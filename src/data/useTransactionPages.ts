@@ -3,7 +3,7 @@ import {useEffect, useLayoutEffect} from 'react';
 import {useInfiniteQuery} from '@tanstack/react-query';
 
 import type {Range} from './api';
-import type {Session} from './data';
+import type {Session} from './session';
 
 export function useTransactionPages(session: Session, {start, end}: Range) {
   const query = useInfiniteQuery({

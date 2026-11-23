@@ -8,7 +8,8 @@ import {
   type RefObject,
 } from 'react';
 
-import type {Row} from './api';
+import type {Row} from '../data/api';
+
 import {
   emptySelection,
   restrictSelection,

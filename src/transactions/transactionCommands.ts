@@ -12,8 +12,9 @@ import {
   X,
 } from 'lucide-react';
 
-import type {Choice, Row} from './api';
-import type {CommandItem} from './commandSearch';
+import type {Choice, Row} from '../data/api';
+import type {CommandItem} from '../ui/commandSearch';
+
 import {columns, type SortDescriptor} from './sorting';
 import {
   editActions,

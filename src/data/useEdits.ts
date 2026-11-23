@@ -3,7 +3,7 @@ import {useRef, useState} from 'react';
 import {toast} from 'sonner';
 
 import type {Update} from './api';
-import {message, type Edit, type Session} from './data';
+import {message, type Edit, type Session} from './session';
 
 export function useEdits(session: Session) {
   const [undo, setUndo] = useState<Edit[]>([]);

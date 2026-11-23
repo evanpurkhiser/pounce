@@ -24,11 +24,12 @@ import {
 import {Autocomplete} from '@base-ui/react/autocomplete';
 import {parseDate, type CalendarDate} from '@internationalized/date';
 
-import type {Choice, Range, Row} from './api';
+import type {Choice, Range, Row} from '../data/api';
+import {Picker, useInitialFocus} from '../ui/Palette';
+import {rank} from '../ui/search';
+import ui from '../ui/ui.module.css';
+
 import styles from './Editors.module.css';
-import {Picker, useInitialFocus} from './Palette';
-import {rank} from './search';
-import ui from './ui.module.css';
 
 type TextEditorProps = {
   value: string;

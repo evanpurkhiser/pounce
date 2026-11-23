@@ -8,7 +8,8 @@ import {
   useQueryStates,
 } from 'nuqs';
 
-import type {Metadata, Range, Row} from './api';
+import type {Metadata, Range, Row} from '../data/api';
+
 import {columns, defaultSort, type SortDescriptor} from './sorting';
 import {reviewStatuses, type ReviewStatus} from './transactionActions';
 import {

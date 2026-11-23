@@ -1,7 +1,8 @@
-import type {Metadata, Patch, Row} from './api';
+import type {Metadata, Patch, Row} from '../data/api';
+import type {Field} from '../transactions/transactionActions';
+import ui from '../ui/ui.module.css';
+
 import {CategoryPicker, DateEditor, NoteEditor, PayeeEditor, TagPicker} from './Editors';
-import type {Field} from './transactionActions';
-import ui from './ui.module.css';
 
 export type RowPatch = Patch | ((row: Row) => Patch);
 

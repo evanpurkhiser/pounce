@@ -1,6 +1,6 @@
 import {expect, test, type Page} from '@playwright/test';
 
-import {currentMonth, shiftMonth} from '../src/api';
+import {currentMonth, shiftMonth} from '../src/data/api';
 
 const row = (page: Page, id: number) => page.locator(`[data-row-id="${id}"]`);
 const selection = (page: Page) => page.locator('[data-row-id][aria-selected=true]');

@@ -10,7 +10,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-import type {Row} from './api';
+import type {Row} from '../data/api';
 
 export type Field = 'category' | 'payee' | 'date' | 'note' | 'tags';
 

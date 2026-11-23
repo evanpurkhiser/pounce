@@ -3,10 +3,11 @@ import {memo} from 'react';
 import {useQuery} from '@tanstack/react-query';
 import {ChevronRight} from 'lucide-react';
 
-import {monthRange, money, shiftMonth, type Metadata} from './api';
+import {monthRange, money, shiftMonth, type Metadata} from '../data/api';
+import {message, type Session} from '../data/session';
+import ui from '../ui/ui.module.css';
+
 import styles from './Budget.module.css';
-import {message, type Session} from './data';
-import ui from './ui.module.css';
 
 type BudgetRow = {
   categoryId: number;

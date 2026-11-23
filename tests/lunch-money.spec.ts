@@ -1,7 +1,7 @@
 import {expect, test} from '@playwright/test';
 
-import {monthRange, currentMonth, type Patch} from '../src/api';
-import {demoSource} from '../src/transactions';
+import {monthRange, currentMonth, type Patch} from '../src/data/api';
+import {demoSource} from '../src/data/demo';
 
 test('loads a connected budget, handles API errors, and restores the connection after reload', async ({
   page,

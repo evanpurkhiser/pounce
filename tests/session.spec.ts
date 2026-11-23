@@ -1,8 +1,8 @@
 import {expect, test} from '@playwright/test';
 
-import {currentMonth, monthRange} from '../src/api';
-import {createSession} from '../src/data';
-import {demoSource} from '../src/transactions';
+import {currentMonth, monthRange} from '../src/data/api';
+import {demoSource} from '../src/data/demo';
+import {createSession} from '../src/data/session';
 
 async function loadSession() {
   const source = demoSource();

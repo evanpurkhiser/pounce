@@ -1,4 +1,4 @@
-import type {Metadata, Row} from './api';
+import type {Metadata, Row} from '../data/api';
 
 const dateColumn = {
   id: 'date',

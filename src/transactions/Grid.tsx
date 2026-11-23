@@ -23,8 +23,10 @@ import {
 } from '@tanstack/react-table';
 import {Check, Minus, Repeat2, Split} from 'lucide-react';
 
-import {money, type Metadata, type Row} from './api';
-import {NoteEditor, PayeeEditor} from './Editors';
+import {money, type Metadata, type Row} from '../data/api';
+import {NoteEditor, PayeeEditor} from '../editors/Editors';
+import ui from '../ui/ui.module.css';
+
 import styles from './Grid.module.css';
 import {
   categoryName,
@@ -42,7 +44,6 @@ import {
   type Field,
   type InlineEditorField,
 } from './transactionActions';
-import ui from './ui.module.css';
 import type {GridInteraction} from './useTransactionGrid';
 
 type InlineEditor = {

@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import {Toaster, toast} from 'sonner';
 
+import {Budget} from '../budget/Budget';
 import {
   currentMonth,
   liveSource,
@@ -23,14 +24,14 @@ import {
   type Choice,
   type Range,
   type Row,
-} from './api';
-import styles from './App.module.css';
-import {Budget} from './Budget';
-import {createSession, message, type Session} from './data';
-import {RangeEditor} from './Editors';
-import {Grid} from './Grid';
-import {CommandList, Modal, Picker, useInitialFocus} from './Palette';
-import paletteStyles from './Palette.module.css';
+} from '../data/api';
+import {demoSource} from '../data/demo';
+import {createSession, message, type Session} from '../data/session';
+import {useEdits} from '../data/useEdits';
+import {useTransactionPages} from '../data/useTransactionPages';
+import {RangeEditor} from '../editors/Editors';
+import {TransactionEditor, type RowPatch} from '../editors/TransactionEditor';
+import {Grid} from '../transactions/Grid';
 import {
   cellEditorTriggerId,
   editActions,
@@ -44,7 +45,7 @@ import {
   type Field,
   type InlineEditorField,
   type ReviewStatus,
-} from './transactionActions';
+} from '../transactions/transactionActions';
 import {
   facetLabels,
   filterCommands,
@@ -52,15 +53,15 @@ import {
   sortCommands,
   tableCommand,
   transactionCommands,
-} from './transactionCommands';
-import {TransactionEditor, type RowPatch} from './TransactionEditor';
-import {demoSource} from './transactions';
-import type {Facet, MultiValueFacet} from './transactionView';
-import ui from './ui.module.css';
-import {useEdits} from './useEdits';
-import {useTransactionGrid} from './useTransactionGrid';
-import {useTransactionPages} from './useTransactionPages';
-import {useTransactionView} from './useTransactionView';
+} from '../transactions/transactionCommands';
+import type {Facet, MultiValueFacet} from '../transactions/transactionView';
+import {useTransactionGrid} from '../transactions/useTransactionGrid';
+import {useTransactionView} from '../transactions/useTransactionView';
+import {CommandList, Modal, Picker, useInitialFocus} from '../ui/Palette';
+import paletteStyles from '../ui/Palette.module.css';
+import ui from '../ui/ui.module.css';
+
+import styles from './App.module.css';
 
 type Overlay =
   | {
