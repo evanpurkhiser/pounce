@@ -1,8 +1,8 @@
 import {Combobox} from '@base-ui/react/combobox';
 import {Dialog} from '@base-ui/react/dialog';
 import {Command} from 'cmdk';
-import type {LucideIcon} from 'lucide-react';
 import {useLayoutEffect, useRef, useState, type ReactNode} from 'react';
+import {searchCommands, type CommandItem} from './commandSearch';
 import {rank, type Searchable} from './search';
 
 export function Modal({title, children, close, restore, back, wide}: {
@@ -32,21 +32,32 @@ export function useInitialFocus<T extends HTMLElement>(select = false) {
   return ref;
 }
 
-export type CommandItem = Searchable & {id: string; group: string; shortcut?: string; detail?: string; icon?: LucideIcon; invoke: () => void};
-
-export function CommandList({items, nested}: {items: CommandItem[]; nested?: (query: string) => CommandItem[]}) {
+export function CommandList({items}: {items: readonly CommandItem[]}) {
   const [query, setQuery] = useState('');
   const input = useInitialFocus<HTMLInputElement>();
-  const results = [...(nested?.(query) ?? []), ...rank(items, query)];
+  const results = searchCommands(items, query);
   const groups = Map.groupBy(results, item => item.group);
 
-  return <Command className="command-palette" label="Transaction commands" shouldFilter={false} vimBindings={false} loop>
+  return <Command className="command-palette" label="Transaction commands" shouldFilter={false} vimBindings={false} loop
+    onKeyDownCapture={event => {
+      if (event.key !== 'Enter' || !(event.metaKey || event.ctrlKey) || event.nativeEvent.isComposing) return;
+      const active = event.currentTarget.querySelector<HTMLElement>('[data-command-key][aria-selected="true"]');
+      const toggle = results.find(item => item.key === active?.dataset.commandKey)?.toggle;
+      if (!toggle) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      toggle();
+    }}>
     <Command.Input ref={input} value={query} onValueChange={setQuery} placeholder="Type a command…" className="search-input" />
     <Command.List className="choice-list">
       <Command.Empty className="empty">No matching commands.</Command.Empty>
       {[...groups].map(([group, commands]) => <Command.Group key={group} heading={group}>
-        {commands.map(item => <Command.Item key={item.id} value={item.id} onSelect={item.invoke} className="choice">
-          {item.icon && <item.icon className="command-icon action-icon" aria-hidden />}
+        {commands.map(item => <Command.Item key={item.key} value={item.key} data-command-key={item.key} onSelect={item.invoke} className="choice"
+          aria-description={item.checked ? 'Filter active' : undefined}>
+          {item.checked !== undefined
+            ? <span className="command-icon" aria-hidden>{item.checked ? '✓' : '□'}</span>
+            : item.icon && <item.icon className="command-icon action-icon" aria-hidden />}
           <span className="command-label">{item.label}</span>
           {item.detail && <small className="command-detail">{item.detail}</small>}
           {item.shortcut && <kbd>{item.shortcut}</kbd>}
@@ -56,7 +67,7 @@ export function CommandList({items, nested}: {items: CommandItem[]; nested?: (qu
   </Command>;
 }
 
-type PickItem = Searchable & {id: string; detail?: string; mark?: 'checked' | 'mixed' | 'unchecked'};
+type PickItem = Searchable & {id: string; detail?: string; group?: boolean; groupLabel?: string; mark?: 'checked' | 'mixed' | 'unchecked'};
 
 export function Picker({items, title, choose, checked, toggle, modifierToggle, reset, footer}: {
   items: PickItem[];
@@ -71,9 +82,11 @@ export function Picker({items, title, choose, checked, toggle, modifierToggle, r
   const [query, setQuery] = useState('');
   const [highlight, setHighlight] = useState<string>();
   const input = useInitialFocus<HTMLInputElement>();
+  const sections = [...Map.groupBy(rank(items, query), item => item.group ? item.label : item.groupLabel)]
+    .map(([label, choices]) => ({label, choices: choices.toSorted((a, b) => Number(!!b.group) - Number(!!a.group))}));
   const common = {
     items,
-    filteredItems: rank(items, query),
+    filteredItems: sections.flatMap(({choices}) => choices),
     inline: true as const,
     open: true as const,
     autoHighlight: true,
@@ -81,10 +94,20 @@ export function Picker({items, title, choose, checked, toggle, modifierToggle, r
     itemToStringLabel: (item: PickItem) => item.label,
     isItemEqualToValue: (item: PickItem, value: PickItem) => item.id === value.id,
     onItemHighlighted: (item: PickItem | undefined) => setHighlight(item?.id),
-    onInputValueChange: (value: string, event: {isItemPress?: boolean}) => {
-      if (!event.isItemPress) setQuery(value);
+    onInputValueChange: (value: string, event: Combobox.Root.ChangeEventDetails) => {
+      if (event.reason !== 'item-press') setQuery(value);
     },
   };
+
+  function renderItem(item: PickItem) {
+    return <Combobox.Item key={item.id} value={item} className="choice">
+      {item.mark && <span aria-hidden className="mark">{item.mark === 'mixed' ? '−' : item.mark === 'checked' ? '✓' : '□'}</span>}
+      <span className="choice-label">{item.label}
+        {item.group && <> <small className="choice-badge">All in group</small></>}
+      </span>
+      {item.detail && <small>{item.detail}</small>}
+    </Combobox.Item>;
+  }
 
   const body = <>
     <Combobox.Input ref={input} className="search-input" aria-label={title} placeholder={title} onKeyDownCapture={event => {
@@ -97,11 +120,12 @@ export function Picker({items, title, choose, checked, toggle, modifierToggle, r
       }
     }} />
     <Combobox.List className="choice-list">
-      {(item: PickItem) => <Combobox.Item key={item.id} value={item} className="choice">
-        {item.mark && <span aria-hidden className="mark">{item.mark === 'mixed' ? '−' : item.mark === 'checked' ? '✓' : '□'}</span>}
-        <span>{item.label}</span>
-        {item.detail && <small>{item.detail}</small>}
-      </Combobox.Item>}
+      {sections.map(({label, choices}) => label ? (
+        <Combobox.Group key={label}>
+          <Combobox.GroupLabel className="choice-group-label">{label}</Combobox.GroupLabel>
+          {choices.map(renderItem)}
+        </Combobox.Group>
+      ) : choices.map(renderItem))}
     </Combobox.List>
     <Combobox.Empty className="empty">No matching choices.</Combobox.Empty>
     {(footer || modifierToggle) && <footer className="editor-footer">

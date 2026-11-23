@@ -1,4 +1,3 @@
-import type {SortDescriptor} from 'react-aria-components';
 import type {Metadata, Row} from './api';
 
 export const columns = [
@@ -10,6 +9,9 @@ export const columns = [
   {id: 'tags', label: 'Tags', directions: ['A to Z', 'Z to A']},
   {id: 'review', label: 'Review', directions: ['Unreviewed first', 'Reviewed first']},
 ] as const;
+
+export type SortColumn = typeof columns[number]['id'];
+export type SortDescriptor = {column: SortColumn; direction: 'ascending' | 'descending'};
 
 export const defaultSort: SortDescriptor = {column: 'date', direction: 'descending'};
 
@@ -25,7 +27,6 @@ export function tagNames(row: Row, metadata?: Metadata) {
 }
 
 export function reviewLabel(row: Row) {
-  if (row.is_pending) return 'Pending';
   if (row.status === 'delete_pending') return 'Needs attention';
   return row.status === 'reviewed' ? 'Reviewed' : 'Unreviewed';
 }

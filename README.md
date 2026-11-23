@@ -1,6 +1,6 @@
 # Lunchline
 
-A keyboard-first transaction inbox for Lunch Money. The app opens in the current month's Unreviewed view. Sample data supports the full review and editing flow without an account.
+A keyboard-first transaction inbox for Lunch Money. The app opens with the current month's posted transactions. Sample data supports the full review and editing flow without an account.
 
 ```sh
 npm ci
@@ -18,7 +18,7 @@ See the [Transactions UX spec](docs/command-palette.md) for the review workflow,
 ## Stack
 
 - React, TypeScript, and Vite.
-- React Aria Table and DatePicker for the grid, row selection, and date entry.
+- TanStack Table for the transaction grid. Lunchline owns keyboard focus and row selection, and React Aria DatePicker handles date entry.
 - Base UI for dialogs, category and tag comboboxes, payee autocomplete, and detail tabs.
 - cmdk for command navigation, Fuse.js for shared fuzzy ranking, and TanStack Hotkeys for shortcuts.
 - TanStack DB for reactive rows and optimistic edits. TanStack Query loads date ranges, metadata, and budget summaries. Lunchline keeps the session's undo and redo entries and writes their patches through the same API path.

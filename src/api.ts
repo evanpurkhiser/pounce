@@ -6,7 +6,7 @@ export type Row = Schema['transactionObject'];
 export type Patch = Partial<Pick<Row, 'payee' | 'date' | 'category_id' | 'tag_ids' | 'notes'>> & {status?: 'reviewed' | 'unreviewed'};
 export type Update = {id: number; patch: Patch};
 export type Range = {start: string; end: string};
-export type Choice = {id: string; label: string; aliases?: string[]; group?: boolean; members?: number[]};
+export type Choice = {id: string; label: string; aliases?: string[]; group?: boolean; groupLabel?: string; members?: number[]};
 export type Metadata = {categories: Choice[]; tags: Choice[]; accounts: Choice[]; currency: string; cadence: string};
 export type Summary = Schema['summaryResponseObject'];
 
@@ -27,8 +27,8 @@ export function money(amount: number, currency: string, fractionDigits?: number)
   }).format(amount);
 }
 export const accountKey = (row: Row) => row.manual_account_id ? 'manual:' + row.manual_account_id : row.plaid_account_id ? 'plaid:' + row.plaid_account_id : 'cash';
-export const canEdit = (row: Row) => !row.is_split_parent && row.split_parent_id == null && !row.is_group_parent && row.group_parent_id == null;
-export const canReview = (row: Row) => canEdit(row) && !row.is_pending && row.status !== 'delete_pending';
+export const isSplitOrGrouped = (row: Row) =>
+  row.is_split_parent || row.split_parent_id != null || row.is_group_parent || row.group_parent_id != null;
 
 export type TransactionPage = {rows: Row[]; nextOffset?: number};
 
@@ -91,14 +91,16 @@ export function liveSource(token: string): DataSource {
         request<{plaid_accounts: {id: number; name: string; display_name?: string | null}[]}>('/plaid_accounts', options),
         request<{budget_period_granularity: string}>('/budgets/settings', options),
       ]);
-      const categoryChoice = (category: {id: number; name: string}): Choice =>
-        ({id: String(category.id), label: category.name, aliases: categoryAliases[category.name.toLowerCase()]});
+      const categoryChoice = (category: {id: number; name: string}, groupLabel?: string): Choice => ({
+        id: String(category.id), label: category.name, groupLabel,
+        aliases: [...(categoryAliases[category.name.toLowerCase()] ?? []), ...(groupLabel ? [groupLabel] : [])],
+      });
       return {
         currency: user.primary_currency,
         cadence: settings.budget_period_granularity,
         categories: [uncategorized, ...categories.categories.flatMap(category => [
           {...categoryChoice(category), group: category.is_group, members: category.children?.map(child => child.id)},
-          ...(category.children ?? []).map(categoryChoice),
+          ...(category.children ?? []).map(child => categoryChoice(child, category.name)),
         ])],
         tags: tags.tags.map(tag => ({id: String(tag.id), label: tag.name})),
         accounts: [
@@ -110,7 +112,7 @@ export function liveSource(token: string): DataSource {
     },
     async transactionsPage(range, offset, signal) {
       const limit = 1000;
-      const query = new URLSearchParams({start_date: range.start, end_date: range.end, include_pending: 'true', limit: String(limit), offset: String(offset)});
+      const query = new URLSearchParams({start_date: range.start, end_date: range.end, include_pending: 'false', limit: String(limit), offset: String(offset)});
       const {transactions, has_more} = await request<{transactions: Row[]; has_more: boolean}>('/transactions?' + query, {signal});
       if (has_more && !transactions.length) throw new Error('Lunch Money returned an empty page before the end of the date range.');
       return {rows: transactions, nextOffset: has_more ? offset + limit : undefined};

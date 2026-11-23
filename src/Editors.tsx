@@ -2,57 +2,91 @@ import {Autocomplete} from '@base-ui/react/autocomplete';
 import {Tabs} from '@base-ui/react/tabs';
 import {parseDate, type CalendarDate} from '@internationalized/date';
 import {Button, Calendar, CalendarCell, CalendarGrid, DateInput, DatePicker, DateSegment, Dialog, Group, Heading, Label, Popover} from 'react-aria-components';
-import {useState, type FocusEvent, type KeyboardEvent} from 'react';
+import {useRef, useState, type FocusEvent, type KeyboardEvent, type PointerEvent, type RefObject} from 'react';
 import {type Choice, type Range, type Row} from './api';
 import {Picker, useInitialFocus} from './Palette';
 import {rank} from './search';
 
-function editorBindings(cancel?: () => void, leave?: () => void) {
-  return {
-    onBlurCapture: leave && ((event: FocusEvent<HTMLFormElement>) => {
-      const editor = event.currentTarget;
-      if (!editor.contains(event.relatedTarget)) {
-        queueMicrotask(() => {
-          if (editor.isConnected && !editor.contains(document.activeElement)) leave();
-        });
-      }
+type TextEditorProps = {
+  value: string;
+  apply: (value: string) => void;
+  cancel?: () => void;
+  onLeave?: (value?: string) => void;
+};
+
+function useTextDraft({value, apply, cancel, onLeave}: TextEditorProps, options?: {
+  allowEmpty?: boolean;
+  mixed?: boolean;
+  popup?: RefObject<HTMLElement | null>;
+}) {
+  const [draft, setDraft] = useState(value);
+  const pending = useRef<string>(undefined);
+
+  function update(next: string) {
+    pending.current = next;
+    setDraft(next);
+  }
+
+  function finish(leave: boolean, confirmed = pending.current) {
+    pending.current = undefined;
+    const next = confirmed?.trim();
+    const changed = next !== undefined && (options?.allowEmpty || next.length > 0)
+      && (options?.mixed || next !== value);
+    if (leave && onLeave) onLeave(changed ? next : undefined);
+    else if (changed) apply(next);
+  }
+
+  return {draft, update, finish, bindings: {
+    onPointerDown: onLeave && ((event: PointerEvent<HTMLFormElement>) => {
+      if (event.target !== event.currentTarget || event.button !== 0) return;
+
+      event.preventDefault();
+      event.currentTarget.querySelector<HTMLElement>('input,textarea')?.focus();
     }),
-    onKeyDownCapture: cancel && ((event: KeyboardEvent<HTMLFormElement>) => {
-      if (event.key === 'Escape' && !event.nativeEvent.isComposing) {
+    onBlurCapture(event: FocusEvent<HTMLFormElement>) {
+      const editor = event.currentTarget;
+      const contains = (target: Node | null) => editor.contains(target) || !!options?.popup?.current?.contains(target);
+      if (contains(event.relatedTarget)) return;
+
+      if (event.relatedTarget) finish(true);
+      else queueMicrotask(() => {
+        if (editor.isConnected && !contains(document.activeElement)) finish(true);
+      });
+    },
+    onKeyDownCapture(event: KeyboardEvent<HTMLFormElement>) {
+      if (event.key !== 'Escape' || event.nativeEvent.isComposing) return;
+
+      pending.current = undefined;
+      if (cancel) {
         event.preventDefault();
         event.stopPropagation();
         cancel();
       }
-    }),
-  };
+    },
+  }};
 }
 
-export function PayeeEditor({value, payees, apply, cancel, onLeave}: {
-  value: string; payees: string[]; apply: (value: string) => void; cancel: () => void; onLeave?: () => void;
-}) {
-  const [draft, setDraft] = useState(value);
+export function PayeeEditor({payees, ...editor}: TextEditorProps & {payees: string[]}) {
+  const popup = useRef<HTMLDivElement>(null);
+  const {draft, update, finish, bindings} = useTextDraft(editor, {popup});
   const [showSuggestions, setShowSuggestions] = useState(true);
   const input = useInitialFocus<HTMLInputElement>(true);
   const suggestions = rank(payees.map(label => ({label})), draft).slice(0, 12).map(item => item.label);
 
-  return <form className="editor payee-editor" {...editorBindings(cancel, onLeave)} onSubmit={event => {
+  return <form className="editor payee-editor" {...bindings} onSubmit={event => {
     event.preventDefault();
-    const name = draft.trim();
-    if (name) apply(name);
+    finish(false);
   }}>
     <Autocomplete.Root open={showSuggestions && suggestions.length > 0} onOpenChange={setShowSuggestions}
       items={payees} filteredItems={suggestions} value={draft} onValueChange={(name, event) => {
-        setDraft(name);
+        update(name);
         setShowSuggestions(true);
-        if (event.reason === 'item-press') apply(name);
+        if (event.reason === 'item-press') finish(false, name);
       }}>
-      <div className="controls">
-        <Autocomplete.Input aria-label="Payee" ref={input} />
-        <button type="submit" disabled={!draft.trim()}>Save payee</button>
-      </div>
+      <Autocomplete.Input aria-label="Payee" ref={input} />
       <Autocomplete.Portal>
         <Autocomplete.Positioner align="start" sideOffset={4} className="payee-positioner">
-          <Autocomplete.Popup className="suggestions">
+          <Autocomplete.Popup ref={popup} className="suggestions">
             <Autocomplete.List>
               {(payee: string) => <Autocomplete.Item key={payee} value={payee} className="choice">{payee}</Autocomplete.Item>}
             </Autocomplete.List>
@@ -106,18 +140,14 @@ export function RangeEditor({range, apply}: {range: Range; apply: (range: Range)
   </form>;
 }
 
-export function NoteEditor({value, apply, cancel, onLeave}: {
-  value: string; apply: (value: string) => void; cancel?: () => void; onLeave?: () => void;
-}) {
-  const [draft, setDraft] = useState(value);
+export function NoteEditor({inline, mixed, ...editor}: TextEditorProps & {inline?: boolean; mixed?: boolean}) {
+  const {draft, update, bindings} = useTextDraft(editor, {allowEmpty: true, mixed});
   const ref = useInitialFocus<HTMLTextAreaElement>();
-  return <form className="editor note-editor" {...editorBindings(cancel, onLeave)}
-    onSubmit={event => { event.preventDefault(); if (draft.trim()) apply(draft.trim()); }}>
-    <label>{onLeave ? <span className="visually-hidden">Note</span> : 'Note'}<textarea ref={ref} rows={onLeave ? 2 : 5} value={draft} onChange={event => setDraft(event.target.value)} /></label>
-    <div className="controls">
-      <button type="submit" disabled={!draft.trim()}>Save note</button>
-      <button type="button" onClick={() => apply('')}>Clear note</button>
-    </div>
+  return <form className="editor note-editor" {...bindings} onSubmit={event => event.preventDefault()}>
+    <label>{inline ? <span className="visually-hidden">Note</span> : 'Note'}
+      <textarea ref={ref} rows={inline ? 1 : 5} value={draft} placeholder={mixed ? 'Mixed notes' : undefined}
+        onChange={event => update(event.target.value)} />
+    </label>
   </form>;
 }
 
@@ -140,11 +170,12 @@ export function Details({row, note, apply, category, account}: {
 export function CategoryPicker({rows, choices, apply}: {
   rows: Row[]; choices: Choice[]; apply: (category: number | null) => void;
 }) {
+  const [initialCategories] = useState(() => new Set(rows.map(row => String(row.category_id ?? 0))));
   const items = choices.filter(choice => !choice.group).map(choice => {
     const count = rows.filter(row => String(row.category_id ?? 0) === choice.id).length;
     return {...choice, mark: count === rows.length ? 'checked' as const : count ? 'mixed' as const : 'unchecked' as const,
       detail: count && rows.length > 1 ? count + ' of ' + rows.length : undefined};
-  });
+  }).sort((a, b) => Number(initialCategories.has(b.id)) - Number(initialCategories.has(a.id)));
 
   return <Picker title="Search categories" items={items} choose={id => apply(Number(id) || null)} />;
 }
@@ -153,6 +184,7 @@ export function TagPicker({rows, choices, apply}: {
   rows: Row[]; choices: Choice[]; apply: (changes: Map<number, boolean>) => void;
 }) {
   const [staged, setStaged] = useState(new Map<number, boolean>());
+  const [initialTags] = useState(() => new Set(rows.flatMap(row => row.tag_ids)));
   const counts = new Map(choices.map(choice => [choice.id, rows.filter(row => row.tag_ids.includes(Number(choice.id))).length]));
   const items = choices.map(choice => {
     const change = staged.get(Number(choice.id));
@@ -160,7 +192,7 @@ export function TagPicker({rows, choices, apply}: {
     const checked = change ?? count === rows.length;
     return {...choice, mark: checked ? 'checked' as const : change === undefined && count ? 'mixed' as const : 'unchecked' as const,
       detail: change !== undefined ? (change ? 'Add to all' : 'Remove from all') : rows.length > 1 ? count + ' of ' + rows.length : undefined};
-  });
+  }).sort((a, b) => Number(initialTags.has(Number(b.id))) - Number(initialTags.has(Number(a.id))));
   const toggle = (id: string) => {
     const current = staged.get(Number(id)) ?? counts.get(id) === rows.length;
     setStaged(new Map(staged).set(Number(id), !current));

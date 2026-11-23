@@ -21,18 +21,19 @@ function groupTargets(rows: BudgetRow[], metadata?: Metadata): BudgetNode[] {
       const categoryId = Number(group.id);
       const totals = byCategory.get(categoryId);
       const members = children.get(categoryId) ?? [];
-      if (totals?.limit == null && !members.some(member => member.limit != null)) continue;
+      if (!totals && !members.length) continue;
+      const limits = members.flatMap(member => member.limit == null ? [] : [member.limit]);
 
       nodes.push({
         categoryId,
         period: periodRows[0].period,
-        limit: totals?.limit ?? sum(members.map(member => member.limit ?? 0)),
+        limit: totals?.limit ?? (limits.length ? sum(limits) : null),
         spent: totals?.spent ?? sum(members.map(member => member.spent)),
         children: members,
       });
     }
 
-    nodes.push(...periodRows.filter(row => row.limit != null && !parents.has(row.categoryId) && !groupIds.has(row.categoryId)));
+    nodes.push(...periodRows.filter(row => !parents.has(row.categoryId) && !groupIds.has(row.categoryId)));
   }
 
   return nodes;
@@ -63,7 +64,10 @@ export const Budget = memo(function Budget({session, month, metadata}: {session:
       }],
     ),
   ) ?? [];
-  const targets = groupTargets(budget.data?.aligned ? aligned : overlapping, metadata);
+  const withPeriods = new Set(overlapping.map(row => row.categoryId));
+  const targets = groupTargets(budget.data?.aligned ? aligned : [
+    ...overlapping, ...aligned.filter(row => row.limit == null && !withPeriods.has(row.categoryId)),
+  ], metadata);
   const currency = metadata?.currency ?? 'usd';
   const formatBudget = (amount: number) => money(amount, currency, 0);
 
@@ -72,8 +76,10 @@ export const Budget = memo(function Budget({session, month, metadata}: {session:
     return <>
       <span className="budget-amount">{label}<span>{formatBudget(row.spent)}{row.limit == null ? '' : ' / ' + formatBudget(row.limit)}</span></span>
       {row.period && <small>{row.period}</small>}
-      {row.limit != null && row.limit > 0 && <meter aria-label={label + ' budget used' + (row.period ? ' · ' + row.period : '')}
-        min={0} max={row.limit} value={Math.max(0, Math.min(row.spent, row.limit))} />}
+      {row.limit != null && row.limit > 0
+        ? <meter aria-label={label + ' budget used' + (row.period ? ' · ' + row.period : '')}
+          min={0} max={row.limit} value={Math.max(0, Math.min(row.spent, row.limit))} />
+        : <span className="budget-unset" role="img" aria-label={label + (row.limit === 0 ? ' has a zero budget target' : ' has no budget target')} />}
     </>;
   }
 
@@ -81,8 +87,7 @@ export const Budget = memo(function Budget({session, month, metadata}: {session:
     <h2>Monthly budget</h2>
     {budget.isPending && <p role="status">Loading budget…</p>}
     {budget.isError && <p role="alert">{message(budget.error)} <button onClick={() => void budget.refetch()}>Retry</button></p>}
-    {budget.data?.aligned && (targets.length ? <p className="budget-total">{formatBudget(sum(targets.map(row => row.spent)))}
-      {' of '}{formatBudget(sum(targets.map(row => row.limit ?? 0)))} budgeted</p> : <p>No category targets for this month.</p>)}
+    {budget.data?.aligned && !targets.some(row => row.limit != null) && <p>No category targets for this month.</p>}
     {budget.data?.aligned === false && <p>Budget cadence: {metadata?.cadence ?? 'custom'}. Targets are grouped by budget period.</p>}
     {periods.isFetching && <p role="status">Loading budget periods…</p>}
     {periods.isError && <p role="alert">{message(periods.error)} <button onClick={() => void periods.refetch()}>Retry periods</button></p>}

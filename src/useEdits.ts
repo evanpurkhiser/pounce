@@ -25,11 +25,11 @@ export function useEdits(session: Session) {
     }
   }
 
-  function save(label: string, updates: Update[], skipped: number) {
+  function save(label: string, updates: Update[]) {
     void run(async () => {
       const result = await session.write(label, async () => updates);
       const count = result.edit.changes.length;
-      setIssues([...result.issues, ...(skipped ? [skipped + ' ineligible transaction(s) were skipped.'] : [])]);
+      setIssues(result.issues);
       if (count) {
         setUndo([...undo, result.edit]);
         setRedo([]);

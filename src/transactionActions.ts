@@ -1,6 +1,6 @@
-import {CalendarDays, Folder, NotebookPen, Tags, UserRound, type LucideIcon} from 'lucide-react';
+import {CalendarDays, Check, Circle, Folder, NotebookPen, Tags, UserRound, type LucideIcon} from 'lucide-react';
 import type {LetterKey} from '@tanstack/react-hotkeys';
-import {canEdit, canReview, type Row} from './api';
+import type {Row} from './api';
 
 export type Field = 'category' | 'payee' | 'date' | 'note' | 'tags';
 
@@ -26,17 +26,14 @@ export function editTitle(field: Field, multiple: boolean) {
   return multiple ? bulkLabel ?? label : label;
 }
 
-export function canEditAny(rows: Row[]) {
-  return rows.some(canEdit);
-}
-
 export type ReviewStatus = 'reviewed' | 'unreviewed';
 
+export const reviewIcons = {reviewed: Check, unreviewed: Circle};
 export const reviewShortcut = 'R';
 export const reviewStatuses = ['reviewed', 'unreviewed'] as const;
 
 export function reviewTargets(rows: Row[], status: ReviewStatus) {
-  return rows.filter(row => row.status !== status && canReview(row));
+  return rows.filter(row => row.status !== status && !row.is_pending && row.status !== 'delete_pending');
 }
 
 export type CellEditorField = Exclude<Field, 'payee' | 'note'>;

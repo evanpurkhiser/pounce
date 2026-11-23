@@ -10,11 +10,12 @@ export function demoSource(): DataSource {
     categories: [
       {id: '0', label: 'Uncategorized'},
       {id: '10', label: 'Food', group: true, members: [1, 2]},
-      {id: '1', label: 'Dining out', aliases: ['restaurants', 'eating out']},
-      {id: '2', label: 'Groceries'},
+      {id: '1', label: 'Dining out', groupLabel: 'Food', aliases: ['restaurants', 'eating out', 'Food']},
+      {id: '2', label: 'Groceries', groupLabel: 'Food', aliases: ['Food']},
       {id: '3', label: 'Shopping'},
       {id: '4', label: 'Transportation'},
       {id: '5', label: 'Subscriptions'},
+      {id: '6', label: 'Fees'},
     ],
     tags: [{id: '1', label: 'Travel'}, {id: '2', label: 'Work'}, {id: '3', label: 'Shared'}],
     accounts: [{id: 'cash', label: 'Cash'}, {id: 'manual:1', label: 'Checking'}, {id: 'plaid:2', label: 'Credit card'}],
@@ -30,7 +31,7 @@ export function demoSource(): DataSource {
       amount: (position * 6.37 + 4.15).toFixed(2),
       currency: 'usd',
       to_base: position * 6.37 + 4.15,
-      tag_ids: position % 3 === 1 ? [2] : position % 3 === 0 ? [1] : [1, 3],
+      tag_ids: position === 11 ? [] : position % 3 === 1 ? [2] : position % 3 === 0 ? [1] : [1, 3],
       manual_account_id: position % 2 ? 1 : null,
       plaid_account_id: position % 2 ? null : 2,
       is_pending: position === 7,
@@ -56,10 +57,10 @@ export function demoSource(): DataSource {
     async summary(range) {
       return {
         aligned: true,
-        categories: [1, 2, 3, 4, 5].map(category_id => ({
+        categories: [1, 2, 3, 4, 5, 6].map(category_id => ({
           category_id,
           totals: {
-            budgeted: category_id === 2 ? 350 : 150,
+            budgeted: category_id === 6 ? null : category_id === 2 ? 350 : 150,
             other_activity: rows.filter(row => row.category_id === category_id && inRange(row.date, range))
               .reduce((total, row) => total + row.to_base, 0),
             recurring_activity: 0, recurring_remaining: 0, recurring_expected: 0,

@@ -1,6 +1,6 @@
 import {createCollection, createTransaction, localOnlyCollectionOptions} from '@tanstack/db';
 import {QueryClient} from '@tanstack/react-query';
-import {inRange, listTransactions, monthRange, type DataSource, type Patch, type Range, type Row, type TransactionPage, type Update} from './api';
+import {inRange, isSplitOrGrouped, listTransactions, monthRange, type DataSource, type Patch, type Range, type Row, type TransactionPage, type Update} from './api';
 
 type Change = {id: number; before: Patch; after: Patch};
 export type Edit = {label: string; changes: Change[]};
@@ -92,8 +92,13 @@ export function createSession(source: DataSource) {
       autoCommit: false,
       mutationFn: async ({transaction}) => {
         const originals = new Map(transaction.mutations.map(mutation => [Number(mutation.key), mutation]));
-        for (let index = 0; index < changes.length; index += 500) {
-          const batch = changes.slice(index, index + 500);
+        // The bulk endpoint documents restrictions on split and grouped rows.
+        const batches = Map.groupBy(changes, ({id}, index) => {
+          const original = originals.get(id)?.original as Row;
+          return isSplitOrGrouped(original) ? id : 'bulk:' + Math.floor(index / 500);
+        });
+
+        for (const batch of batches.values()) {
           try {
             const sent = batch.map(item => {
               const original = originals.get(item.id)?.original as Row;
