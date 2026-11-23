@@ -1,6 +1,6 @@
 # Transactions UX
 
-Lunchline is a keyboard-first workspace for reviewing and editing Lunch Money transactions. The screen pairs a month of transactions with a budget panel. Move to a row, correct its category or note, mark it reviewed, and keep going. A selection turns the same commands into bulk actions.
+Pounce is a keyboard-first workspace for reviewing and editing Lunch Money transactions. The screen pairs a month of transactions with a budget panel. Move to a row, correct its category or note, mark it reviewed, and keep going. A selection turns the same commands into bulk actions.
 
 ## Month, filters, and search
 

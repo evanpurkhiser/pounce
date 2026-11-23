@@ -86,7 +86,7 @@ type WorkspaceSurface =
   | {kind: 'inline'; id: number; field: InlineEditorField}
   | {kind: 'cell'; id: number; field: CellEditorField; anchor: HTMLElement};
 
-const tokenStorageKey = 'lunchline.lunchMoneyToken';
+const tokenStorageKey = 'pounce.lunchMoneyToken';
 
 function readToken() {
   try {
@@ -713,7 +713,7 @@ function Workspace({
   return (
     <>
       <header className={styles.top}>
-        <strong>Lunchline</strong>
+        <strong>Pounce</strong>
         <span>{live ? 'Lunch Money' : 'Sample data'}</span>
         <button type="button" onClick={() => open({kind: 'connect'})}>
           {live ? 'Connection' : 'Connect Lunch Money'}

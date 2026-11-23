@@ -1,6 +1,6 @@
 import {defineConfig} from '@playwright/test';
 
-const externalUrl = process.env.LUNCHLINE_TEST_URL;
+const externalUrl = process.env.POUNCE_TEST_URL;
 export default defineConfig({
   testDir: './tests',
   workers: 2,

@@ -10,7 +10,7 @@ export default defineConfig(({command, mode}) => {
     plugins: [
       react(),
       remote && {
-        name: 'lunchline:compress-remote-dev',
+        name: 'pounce:compress-remote-dev',
         configureServer(server) {
           server.middlewares.use(compression());
         },
