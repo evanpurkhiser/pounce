@@ -1,21 +1,76 @@
-.top { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; padding: .7rem 1rem; border-bottom: 1px solid var(--line); background: white; }
-.top strong { font-size: 1.06rem; }
-.top span { margin-right: auto; color: #4b5563; }
-.layout { display: grid; grid-template-columns: minmax(min-content, 1fr) minmax(15rem, 19rem); gap: 1rem; padding: 1rem; }
-.layout:has(> aside[hidden]) { grid-template-columns: minmax(min-content, 1fr); }
-.workspace { min-width: 0; }
-:is(.top, .transactionToolbar) button { display: inline-flex; align-items: center; gap: .35rem; }
-.transactionToolbar > button > svg { height: 1lh; }
-.chips button { background: #eaf0fc; }
-.chips:empty { display: none; }
-.selectionToolbar { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; margin-inline-start: auto; }
-.selectionToolbar [role=status] { color: #42516a; }
-.status span { margin-right: auto; }
-.status { margin-top: .55rem; min-height: 2rem; }
+.top {
+  anchor-name: --app-header;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--line);
+  background: white;
+}
+.top strong {
+  font-size: 1.06rem;
+}
+.top span {
+  margin-right: auto;
+  color: #4b5563;
+}
+.layout {
+  display: grid;
+  grid-template-columns: minmax(min-content, 1fr) minmax(9rem, 19rem);
+  gap: 1rem;
+  padding: 1rem;
+}
+.layout:has(> [hidden]) {
+  grid-template-columns: minmax(min-content, 1fr);
+}
+.workspace {
+  min-width: 0;
+}
+:is(.top, .transactionToolbar) button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.transactionToolbar > button > svg {
+  height: 1lh;
+}
+.chips button {
+  background: #eaf0fc;
+}
+.chips:empty {
+  display: none;
+}
+.selectionToolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-inline-start: auto;
+}
+.selectionToolbar [role='status'] {
+  color: #42516a;
+}
+.status span {
+  margin-right: auto;
+}
+.status {
+  margin-top: 0.55rem;
+  min-height: 2rem;
+}
 
-.warning { padding: .55rem; background: #fff1d9; border: 1px solid #ca9430; white-space: pre-wrap; }
-.warning p { margin: .4rem 0 0; }
+.warning {
+  padding: 0.55rem;
+  background: #fff1d9;
+  border: 1px solid #ca9430;
+  white-space: pre-wrap;
+}
+.warning p {
+  margin: 0.4rem 0 0;
+}
 
 @media (max-width: 950px) {
-  .layout { grid-template-columns: minmax(min-content, 1fr); }
+  .layout {
+    grid-template-columns: minmax(min-content, 1fr);
+  }
 }

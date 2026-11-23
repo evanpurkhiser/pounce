@@ -1,5 +1,7 @@
-import {useInfiniteQuery} from '@tanstack/react-query';
 import {useEffect, useLayoutEffect} from 'react';
+
+import {useInfiniteQuery} from '@tanstack/react-query';
+
 import type {Range} from './api';
 import type {Session} from './data';
 
@@ -13,13 +15,19 @@ export function useTransactionPages(session: Session, {start, end}: Range) {
   const {data, hasNextPage, isFetching, isError, fetchNextPage, refetch} = query;
 
   useEffect(() => {
-    if (hasNextPage && !isFetching && !isError) void fetchNextPage();
+    if (hasNextPage && !isFetching && !isError) {
+      void fetchNextPage();
+    }
   }, [hasNextPage, isFetching, isError, fetchNextPage]);
 
   useLayoutEffect(() => {
-    if (!data || hasNextPage || isFetching || isError) return;
+    if (!data || hasNextPage || isFetching || isError) {
+      return;
+    }
     const applied = session.applyPages({start, end}, data.pages);
-    if (!applied) void refetch();
+    if (!applied) {
+      void refetch();
+    }
   }, [session, start, end, data, hasNextPage, isFetching, isError, refetch]);
 
   return {

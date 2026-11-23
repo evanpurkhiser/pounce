@@ -6,12 +6,12 @@ Lunchline is a keyboard-first workspace for reviewing and editing Lunch Money tr
 
 The table loads a full calendar month in one continuous list. Previous, next, and current month commands update the table and budget panel. **Go to month…** accepts names such as `Nov 2026` and values such as `2026-11`. Keep active filters when switching months and clear the row selection and its anchor. The budget panel stays scoped to the displayed month as transaction filters change.
 
-| Key sequence | Command |
-| --- | --- |
-| `G` then `N` | Go to the next month. |
-| `G` then `P` | Go to the previous month. |
+| Key sequence | Command                                       |
+| ------------ | --------------------------------------------- |
+| `G` then `N` | Go to the next month.                         |
+| `G` then `P` | Go to the previous month.                     |
 | `G` then `M` | Open **Go to month…** in the command palette. |
-| `G` then `T` | Go to the current month. |
+| `G` then `T` | Go to the current month.                      |
 
 **Filter** opens the following groups.
 
@@ -31,7 +31,7 @@ The URL stores active filter values, search text, and explicit sort. Back and Fo
 
 The grid shows the selection checkbox, Date, Category, Payee, Amount, Note, Tags, and Review in that order. Review uses a green circled check for reviewed rows and a gray circle for unreviewed rows. A gray check labels the compact Review heading visually. The heading and status have accessible labels. Amount shows icons for split transactions and transactions linked to a recurring item. Empty Note and Tags cells are blank and can still open their editors. The header sticks to the top of the viewport as the page scrolls. Cells stay on one line and long text shows an ellipsis.
 
-Click a data column header to sort and click it again to reverse the direction. **Sort by** in Command K offers one action per column, with `S` opening it directly. Choose a new column to sort in ascending order, or choose the current column to reverse its direction. The default is newest first, and search results default to relevance. An explicit column sort applies across months and search results. **Search relevance** in the sort menu restores relevance ordering while searching. Amounts sort in the budget currency. Sorting preserves selected row IDs and keyboard range selection follows the new order.
+Click a data column header to sort and click it again to reverse the direction. **Sort by** in Command K offers one action per column, with `S` opening it directly. Choose a new column to use its default direction, or choose the current column to reverse it. Date defaults to newest first and other columns default to ascending. The default is newest first, and search results default to relevance. An explicit column sort applies across months and search results. **Search relevance** in the sort menu restores relevance ordering while searching. Amounts sort in the budget currency. Sorting preserves selected row IDs and keyboard range selection follows the new order.
 
 ## Monthly budget
 
@@ -41,19 +41,19 @@ The budget panel stays on the right as the desktop workspace scrolls and has its
 
 Transactions starts with all review statuses visible. **Row focus** identifies the active transaction. **Field focus** belongs to that transaction's editor or picker. Moving focus leaves **selection** intact. A filter change deselects rows it hides. Rows still visible stay selected, and clearing the filter leaves previously hidden rows unselected.
 
-| Key | Action |
-| --- | --- |
-| `Tab` / `Shift+Tab` | Enter or leave the grid at its last focused row or cell. First entry focuses the first row. |
-| `J` / `K` | Move row focus down / up. A focused cell keeps its column as you move. From outside the grid, `J` focuses the first visible row and `K` focuses the last. |
-| `G` then `G` / `Shift+G` | Jump to the first / last visible row. Keep the focused column and current selection. |
-| Arrow keys | Move between rows or cells. Left and Right enter or move across the current row. Up and Down preserve the column when a cell has focus. |
-| `Home` / `End` | Focus the first or last cell in the row. Hold Ctrl to jump to the first or last cell in the grid. |
-| `Page Up` / `Page Down` | Move focus by roughly one viewport of transactions. |
-| `X` | Toggle the focused row's selection and set the anchor. A row checkbox also sets the anchor. |
-| `⌘A` / `Ctrl+A` | With grid focus, select all rows in the current filtered view, including rows outside the viewport. Keep focus on the active row. In a text input, select its text. |
-| `Shift+X` | Select the visible range from the anchor through the focused row without moving focus. |
-| `Shift+J` / `Shift+K` or `Shift+↓` / `Shift+↑` | Move focus down / up and adjust the range from the same anchor. |
-| `Esc` | Close the active editor and discard its draft. On successive presses, clear the selection, return from cell focus to row focus, then leave the row. Skip steps that do not apply. |
+| Key                                            | Action                                                                                                                                                                            |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Tab` / `Shift+Tab`                            | Enter or leave the grid at its last focused row or cell. First entry focuses the first row.                                                                                       |
+| `J` / `K`                                      | Move row focus down / up. A focused cell keeps its column as you move. From outside the grid, `J` focuses the first visible row and `K` focuses the last.                         |
+| `G` then `G` / `Shift+G`                       | Jump to the first / last visible row. Keep the focused column and current selection.                                                                                              |
+| Arrow keys                                     | Move between rows or cells. Left and Right enter or move across the current row. Up and Down preserve the column when a cell has focus.                                           |
+| `Home` / `End`                                 | Focus the first or last cell in the row. Hold Ctrl to jump to the first or last cell in the grid.                                                                                 |
+| `Page Up` / `Page Down`                        | Move focus by roughly one viewport of transactions.                                                                                                                               |
+| `X`                                            | Toggle the focused row's selection and set the anchor. A row checkbox also sets the anchor.                                                                                       |
+| `⌘A` / `Ctrl+A`                                | With grid focus, select all rows in the current filtered view, including rows outside the viewport. Keep focus on the active row. In a text input, select its text.               |
+| `Shift+X`                                      | Select the visible range from the anchor through the focused row without moving focus.                                                                                            |
+| `Shift+J` / `Shift+K` or `Shift+↓` / `Shift+↑` | Move focus down / up and adjust the range from the same anchor.                                                                                                                   |
+| `Esc`                                          | Close the active editor and discard its draft. On successive presses, clear the selection, return from cell focus to row focus, then leave the row. Skip steps that do not apply. |
 
 Range shortcuts share one active range in the current visible order. If there is no visible anchor, start at the row that had focus before the shortcut. The range includes both endpoints while focus is away from the anchor. Moving back toward the anchor shrinks the range. Returning to the anchor with Shift navigation clears the active range, and passing it starts a range in the opposite direction. Independently selected rows stay selected throughout.
 
@@ -79,14 +79,14 @@ Closing the palette or editor restores focus to the invoking control or grid cel
 
 **Change category** appears first in the contextual action list.
 
-| Action | Direct key | One focused or selected transaction | Multiple selected transactions |
-| --- | --- | --- | --- |
-| **Change category…** | `C` | Open a searchable dropdown at the target row’s Category cell. | Open the category picker in the palette and apply one category to all targets. |
-| **Edit payee…** | `P` | Select the payee text in the cell and show a floating list of matching payees from loaded transactions. Choose a suggestion or leave the field to save a new name. | Open **Set payee…** in the palette and apply one replacement payee. |
-| **Set transaction date…** | `D` | Open the date editor at the target row’s Date cell, with the existing date. | Open the date picker in the palette. Show the chosen date and affected count before applying. |
-| **Set note…** | `N` | Select the existing note text in the Note cell. The editor grows over the grid as the text wraps. | Open **Replace notes…** in the palette. Start blank if notes differ. Emptying an edited field clears the notes. |
-| **Set tags…** | `T` | Open a searchable tag multi-select at the target row’s Tags cell. | Open the same picker in the palette with mixed tag states. |
-| **Mark reviewed** / **Mark unreviewed** | `R` | The palette shows the action that changes the target's status. The direct key toggles the target row, including a split child. | Show each action that changes eligible rows in the selection. Show affected counts. `R` marks eligible unreviewed rows reviewed first, or marks eligible reviewed rows unreviewed if all are reviewed. |
+| Action                                  | Direct key | One focused or selected transaction                                                                                                                                | Multiple selected transactions                                                                                                                                                                         |
+| --------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Change category…**                    | `C`        | Open a searchable dropdown at the target row’s Category cell.                                                                                                      | Open the category picker in the palette and apply one category to all targets.                                                                                                                         |
+| **Edit payee…**                         | `P`        | Select the payee text in the cell and show a floating list of matching payees from loaded transactions. Choose a suggestion or leave the field to save a new name. | Open **Set payee…** in the palette and apply one replacement payee.                                                                                                                                    |
+| **Set transaction date…**               | `D`        | Open the date editor at the target row’s Date cell, with the existing date.                                                                                        | Open the date picker in the palette. Show the chosen date and affected count before applying.                                                                                                          |
+| **Set note…**                           | `N`        | Select the existing note text in the Note cell. The editor grows over the grid as the text wraps.                                                                  | Open **Replace notes…** in the palette. Start blank if notes differ. Emptying an edited field clears the notes.                                                                                        |
+| **Set tags…**                           | `T`        | Open a searchable tag multi-select at the target row’s Tags cell.                                                                                                  | Open the same picker in the palette with mixed tag states.                                                                                                                                             |
+| **Mark reviewed** / **Mark unreviewed** | `R`        | The palette shows the action that changes the target's status. The direct key toggles the target row, including a split child.                                     | Show each action that changes eligible rows in the selection. Show affected counts. `R` marks eligible unreviewed rows reviewed first, or marks eligible reviewed rows unreviewed if all are reviewed. |
 
 Clicking a field or using its direct shortcut opens the single-row editor. Leaving an inline payee or note field saves the edit and keeps focus at its destination. Leaving a changed bulk text field saves and closes the editor. An empty note clears the note. Escape discards the draft and returns focus to the row. Bulk edit shortcuts focus the first input in the palette. The palette aligns affected transaction counts in a separate column and shows the `R` hint beside its current review action.
 
@@ -115,14 +115,14 @@ Follow-on filters include **Amount**, **Recurring item**, and **Has attachment**
 
 ## Lunch Money v2 API mapping
 
-| Commands | API behavior |
-| --- | --- |
-| Month navigation and review filters | Use `GET /transactions` with `start_date`, `end_date`, and `status`. Fetch API pages behind the scenes so table search and counts cover the full requested range. Request posted transactions and exclude pending rows from the transaction list. |
-| Category, tag, account, and recurring filters | Load choices from `/categories`, `/tags`, `/manual_accounts`, `/plaid_accounts`, and `/recurring_items`. Transaction filters accept a single ID per parameter. Use a single API value where it matches the request, and apply multi-value facets over the full paginated range within the other compatible filters. Category groups expand to their member categories for local filtering. |
-| Search | Search locally within the fetched date range. The transaction list exposes `payee`, `original_name`, and `notes` in the rows, with no free-text query parameter. Complete pagination for the requested scope before reporting a definitive result count or empty state. |
-| Amount and attachment filters | Evaluate these over the fetched rows. Define the currency basis before comparing amounts across currencies. Request `include_files` when attachment data is needed. |
-| Monthly budget panel | Read `GET /summary` for the date range and `GET /budgets/settings` for budget cadence. A calendar month can overlap multiple budget periods. Label the date range and use aligned periods for budget targets when the user’s cadence differs. |
-| Row edits and bulk edits | Use `PUT /transactions/{id}` for single rows and for split or grouped rows in a selection. Send ordinary rows through `PUT /transactions` in batches of up to 500. Send only the intended fields and preserve review status on unrelated edits. Use `additional_tag_ids` for add-only tag changes. When removing tags, calculate the complete `tag_ids` array for each changed transaction using its current tags. |
-| Group and split | Use the dedicated transaction group and split endpoints. Read back the resulting hierarchy and use the detail endpoint for child transactions when needed. |
+| Commands                                      | API behavior                                                                                                                                                                                                                                                                                                                                                                                                       |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Month navigation and review filters           | Use `GET /transactions` with `start_date`, `end_date`, and `status`. Fetch API pages behind the scenes so table search and counts cover the full requested range. Request posted transactions and exclude pending rows from the transaction list.                                                                                                                                                                  |
+| Category, tag, account, and recurring filters | Load choices from `/categories`, `/tags`, `/manual_accounts`, `/plaid_accounts`, and `/recurring_items`. Transaction filters accept a single ID per parameter. Use a single API value where it matches the request, and apply multi-value facets over the full paginated range within the other compatible filters. Category groups expand to their member categories for local filtering.                         |
+| Search                                        | Search locally within the fetched date range. The transaction list exposes `payee`, `original_name`, and `notes` in the rows, with no free-text query parameter. Complete pagination for the requested scope before reporting a definitive result count or empty state.                                                                                                                                            |
+| Amount and attachment filters                 | Evaluate these over the fetched rows. Define the currency basis before comparing amounts across currencies. Request `include_files` when attachment data is needed.                                                                                                                                                                                                                                                |
+| Monthly budget panel                          | Read `GET /summary` for the date range and `GET /budgets/settings` for budget cadence. A calendar month can overlap multiple budget periods. Label the date range and use aligned periods for budget targets when the user’s cadence differs.                                                                                                                                                                      |
+| Row edits and bulk edits                      | Use `PUT /transactions/{id}` for single rows and for split or grouped rows in a selection. Send ordinary rows through `PUT /transactions` in batches of up to 500. Send only the intended fields and preserve review status on unrelated edits. Use `additional_tag_ids` for add-only tag changes. When removing tags, calculate the complete `tag_ids` array for each changed transaction using its current tags. |
+| Group and split                               | Use the dedicated transaction group and split endpoints. Read back the resulting hierarchy and use the detail endpoint for child transactions when needed.                                                                                                                                                                                                                                                         |
 
 Sources are the [official v2 API reference](https://developers.lunchmoney.app/v2/docs), [generated API types](https://github.com/lunch-money/lunch-money-js-v2/blob/main/src/types.generated.ts), [transaction pagination](https://developers.lunchmoney.app/pagination), [v2 update semantics](https://developers.lunchmoney.app/v2/overview#updating-objects-put), and [v2 migration guide](https://developers.lunchmoney.app/v2/migration-guide).

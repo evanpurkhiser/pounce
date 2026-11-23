@@ -1,28 +1,113 @@
-.budget { max-height: calc(100dvh - 2rem); overflow-y: auto; overscroll-behavior-y: contain; min-width: 0; padding: .8rem; border: 1px solid var(--line); background: white; align-self: start; }
-.budgetItem { margin-top: .35rem; }
-.budgetList { list-style: none; padding: 0; margin: 0; }
-.budgetChildren { margin-left: .45rem; border-left: 1px solid var(--line); padding-left: .7rem; }
-.budgetItem summary { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: .2rem; cursor: pointer; }
-.budgetItem summary::-webkit-details-marker { display: none; }
-.budgetItem summary > .budgetAmount { font-weight: 600; }
-.budgetItem summary > :is(small, meter, .budgetUnset) { grid-column: 1 / -1; }
-.budgetItem details[open] > summary > svg { rotate: 90deg; }
-.budgetItem .budgetAmount { display: flex; align-items: baseline; justify-content: space-between; gap: .3rem; }
-.budgetAmount > span { font-size: .72rem; font-weight: 400; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.budget :is(meter, .budgetUnset) { display: block; width: 100%; margin-top: .15rem; border: 0; border-radius: .2rem; }
-.budget meter { appearance: none; height: .55rem; background: #edf0f2; overflow: hidden; }
-@supports selector(meter::-webkit-meter-bar) {
-  .budget meter { height: 1rem; background: transparent; }
+.column {
+  min-width: 0;
 }
-.budget meter::-webkit-meter-bar { border: 0; border-radius: .2rem; background: #edf0f2; }
-.budget meter::-webkit-meter-optimum-value { background: #218044; border-radius: .2rem; }
-.budget meter::-moz-meter-bar { background: #218044; border-radius: inherit; }
-.budgetUnset { height: .55rem; background: repeating-linear-gradient(135deg, #fff 0 4px, #e3e6ea 4px 8px); }
+.budget {
+  max-block-size: 100dvh;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  padding-inline-start: 0.8rem;
+  background: white;
+}
+.budgetItem {
+  margin-top: 0.35rem;
+}
+.budgetList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.budgetChildren {
+  margin-left: 0.45rem;
+  border-left: 1px solid var(--line);
+  padding-left: 0.7rem;
+}
+.budgetItem summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 0.2rem;
+  cursor: pointer;
+}
+.budgetItem summary::-webkit-details-marker {
+  display: none;
+}
+.budgetItem summary > .budgetAmount {
+  font-weight: 600;
+}
+.budgetItem summary > :is(small, meter, .budgetUnset) {
+  grid-column: 1 / -1;
+}
+.budgetItem details[open] > summary > svg {
+  rotate: 90deg;
+}
+.budgetItem .budgetAmount {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.3rem;
+}
+.budgetAmount > span {
+  font-size: 0.72rem;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.budget :is(meter, .budgetUnset) {
+  display: block;
+  width: 100%;
+  margin-top: 0.15rem;
+  border: 0;
+  border-radius: 0.2rem;
+}
+.budget meter {
+  appearance: none;
+  height: 0.55rem;
+  background: #edf0f2;
+  overflow: hidden;
+}
+@supports selector(meter::-webkit-meter-bar) {
+  .budget meter {
+    height: 1rem;
+    background: transparent;
+  }
+}
+.budget meter::-webkit-meter-bar {
+  border: 0;
+  border-radius: 0.2rem;
+  background: #edf0f2;
+}
+.budget meter::-webkit-meter-optimum-value {
+  background: #218044;
+  border-radius: 0.2rem;
+}
+.budget meter::-moz-meter-bar {
+  background: #218044;
+  border-radius: inherit;
+}
+.budgetUnset {
+  height: 0.55rem;
+  background: repeating-linear-gradient(135deg, #fff 0 4px, #e3e6ea 4px 8px);
+}
 
 @media (width > 950px) {
-  .budget { position: sticky; inset-block-start: 1rem; }
+  .column {
+    anchor-name: --budget-column;
+    margin-inline-end: -1rem;
+  }
+  .budget {
+    position: fixed;
+    inset-block: 3.65rem 0;
+    inset-block-start: anchor(--app-header bottom, 3.65rem);
+    inset-inline-end: 0;
+    inline-size: 20rem;
+    inline-size: anchor-size(--budget-column inline, 20rem);
+    z-index: 2;
+  }
 }
 
 @media (max-width: 950px) {
-  .budget { max-width: 25rem; width: 100%; }
+  .budget {
+    max-width: 25rem;
+    width: 100%;
+  }
 }

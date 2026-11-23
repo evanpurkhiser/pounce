@@ -3,6 +3,7 @@
 A keyboard-first transaction inbox for Lunch Money. The app opens with the current month's posted transactions. Sample data supports the full review and editing flow without an account.
 
 ```sh
+mise install
 npm ci
 npm run dev
 ```
@@ -25,6 +26,10 @@ See the [Transactions UX spec](docs/command-palette.md) for the review workflow,
 - Base UI for dialogs, category and tag comboboxes, and payee autocomplete.
 - cmdk for command navigation, Fuse.js for shared fuzzy ranking, and TanStack Hotkeys for shortcuts.
 - TanStack DB for reactive rows and optimistic edits. TanStack Query loads date ranges, metadata, and budget summaries. Lunchline keeps the session's undo and redo entries and writes their patches through the same API path.
+
+## Checks
+
+Use `npm run lint`, `npm run format:check`, and `npm run typecheck` to check the project. Run `npm run format` to apply the formatter.
 
 ## Acceptance tests
 

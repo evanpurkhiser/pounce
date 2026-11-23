@@ -1,8 +1,28 @@
-import {useLayoutEffect, useMemo, useRef, useState, type FocusEvent, type KeyboardEvent, type RefObject} from 'react';
-import type {Row} from './api';
-import {emptySelection, restrictSelection, selectedKeys, selectRange, toggleRow} from './selection';
+import {
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FocusEvent,
+  type KeyboardEvent,
+  type RefObject,
+} from 'react';
 
-export function useTransactionGrid(rows: Row[], suspended: boolean, fallback: RefObject<HTMLElement | null>) {
+import type {Row} from './api';
+import {
+  emptySelection,
+  restrictSelection,
+  selectedKeys,
+  selectRange,
+  toggleRow,
+} from './selection';
+import type {Field} from './transactionActions';
+
+export function useTransactionGrid(
+  rows: Row[],
+  suspended: boolean,
+  fallback: RefObject<HTMLElement | null>,
+) {
   const [selection, setSelection] = useState(emptySelection);
   const [active, setActive] = useState<number>();
   const [hasFocus, setHasFocus] = useState(false);
@@ -11,17 +31,32 @@ export function useTransactionGrid(rows: Row[], suspended: boolean, fallback: Re
   const previousOrder = useRef<number[]>([]);
   const order = useMemo(() => rows.map(row => row.id), [rows]);
   const visible = useMemo(() => new Set(order), [order]);
-  const selected = useMemo(() => selectedKeys(restrictSelection(selection, visible)), [selection, visible]);
+  const selected = useMemo(
+    () => selectedKeys(restrictSelection(selection, visible)),
+    [selection, visible],
+  );
   const focusedRow = hasFocus ? rows.find(row => row.id === active) : undefined;
-  const selectedRows = useMemo(() => rows.filter(row => selected.has(row.id)), [rows, selected]);
+  const selectedRows = useMemo(
+    () => rows.filter(row => selected.has(row.id)),
+    [rows, selected],
+  );
 
   function rowElement(id?: number) {
-    return id === undefined ? null : ref.current?.querySelector<HTMLTableRowElement>('[data-row-id="' + id + '"]') ?? null;
+    return id === undefined
+      ? null
+      : (ref.current?.querySelector<HTMLTableRowElement>(`[data-row-id="${id}"]`) ??
+          null);
+  }
+
+  function cellElement(id: number, field: Field) {
+    return rowElement(id)?.querySelector<HTMLElement>(`[data-editor-cell="${field}"]`);
   }
 
   function focusedElement() {
     const element = document.activeElement;
-    return element instanceof HTMLElement && ref.current?.contains(element) ? element : null;
+    return element instanceof HTMLElement && ref.current?.contains(element)
+      ? element
+      : null;
   }
 
   function rowId(element: HTMLElement | null) {
@@ -39,22 +74,30 @@ export function useTransactionGrid(rows: Row[], suspended: boolean, fallback: Re
   }
 
   function setTabStop(target: HTMLElement) {
-    if (tabStop.current === target) return;
+    if (tabStop.current === target) {
+      return;
+    }
     const previous = tabStop.current ?? tableElement();
-    if (previous) previous.tabIndex = -1;
+    if (previous) {
+      previous.tabIndex = -1;
+    }
     target.tabIndex = 0;
     tabStop.current = target;
   }
 
   function focusTarget(target?: HTMLElement | null) {
-    if (!target || target === document.activeElement) return;
+    if (!target || target === document.activeElement) {
+      return;
+    }
     target.focus({preventScroll: true});
     target.scrollIntoView({block: 'nearest', inline: 'nearest'});
   }
 
   function focusCell(row: HTMLTableRowElement | null, index: number) {
     const cell = row?.cells[index];
-    focusTarget(cell?.querySelector<HTMLElement>('[data-grid-control]:not(:disabled)') ?? cell);
+    focusTarget(
+      cell?.querySelector<HTMLElement>('[data-grid-control]:not(:disabled)') ?? cell,
+    );
   }
 
   function focusRow(id?: number) {
@@ -67,7 +110,11 @@ export function useTransactionGrid(rows: Row[], suspended: boolean, fallback: Re
 
   useLayoutEffect(() => {
     const table = tableElement();
-    if (table && tabStop.current && (!tabStop.current.isConnected || tabStop.current.matches(':disabled'))) {
+    if (
+      table &&
+      tabStop.current &&
+      (!tabStop.current.isConnected || tabStop.current.matches(':disabled'))
+    ) {
       setTabStop(table);
     }
 
@@ -78,7 +125,10 @@ export function useTransactionGrid(rows: Row[], suspended: boolean, fallback: Re
 
       if (!suspended && (hasFocus || ref.current?.contains(document.activeElement))) {
         requestAnimationFrame(() => {
-          if (document.activeElement === document.body || ref.current?.contains(document.activeElement)) {
+          if (
+            document.activeElement === document.body ||
+            ref.current?.contains(document.activeElement)
+          ) {
             focusRow(next);
           }
         });
@@ -88,32 +138,54 @@ export function useTransactionGrid(rows: Row[], suspended: boolean, fallback: Re
   }, [visible, active, hasFocus, suspended, order]);
 
   function move(direction: -1 | 1, extend = false, distance = 1) {
-    if (!order.length) return;
+    if (!order.length) {
+      return;
+    }
 
     const focused = focusedElement();
     const cell = focused?.closest<HTMLTableCellElement>('th,td');
     const column = cell?.cellIndex;
     if (column !== undefined && cell?.closest('thead')) {
-      if (direction > 0) focusCell(rowElement(order[0]), column);
+      if (direction > 0) {
+        focusCell(rowElement(order[0]), column);
+      }
       return;
     }
 
     const from = rowId(focused);
     const index = from === undefined ? -1 : order.indexOf(from);
-    const to = order[index < 0 ? direction > 0 ? 0 : order.length - 1 : Math.min(order.length - 1, Math.max(0, index + direction * distance))];
-    if (extend && from !== undefined && to !== from) setSelection(previous => selectRange(previous, order, from, to, true));
-    if (column === undefined) focusRow(to);
-    else if (direction < 0 && index === 0 && distance === 1 && !extend) focusCell(tableElement()?.tHead?.rows[0] ?? null, column);
-    else focusCell(rowElement(to), column);
+    const to =
+      order[
+        index < 0
+          ? direction > 0
+            ? 0
+            : order.length - 1
+          : Math.min(order.length - 1, Math.max(0, index + direction * distance))
+      ];
+    if (extend && from !== undefined && to !== from) {
+      setSelection(previous => selectRange(previous, order, from, to, true));
+    }
+    if (column === undefined) {
+      focusRow(to);
+    } else if (direction < 0 && index === 0 && distance === 1 && !extend) {
+      focusCell(tableElement()?.tHead?.rows[0] ?? null, column);
+    } else {
+      focusCell(rowElement(to), column);
+    }
   }
 
   function jumpToEdge(edge: 'first' | 'last') {
     const id = edge === 'first' ? order[0] : order.at(-1);
-    if (id === undefined) return;
+    if (id === undefined) {
+      return;
+    }
 
     const cell = focusedElement()?.closest<HTMLTableCellElement>('th,td');
-    if (cell) focusCell(rowElement(id), cell.cellIndex);
-    else focusRow(id);
+    if (cell) {
+      focusCell(rowElement(id), cell.cellIndex);
+    } else {
+      focusRow(id);
+    }
   }
 
   function escape() {
@@ -123,11 +195,14 @@ export function useTransactionGrid(rows: Row[], suspended: boolean, fallback: Re
     }
 
     const focused = focusedElement();
-    if (!focused) return false;
+    if (!focused) {
+      return false;
+    }
 
     const id = rowId(focused);
-    if (id !== undefined && focused !== rowElement(id)) focusRow(id);
-    else {
+    if (id !== undefined && focused !== rowElement(id)) {
+      focusRow(id);
+    } else {
       focused.blur();
       setHasFocus(false);
       setActive(undefined);
@@ -137,15 +212,21 @@ export function useTransactionGrid(rows: Row[], suspended: boolean, fallback: Re
   }
 
   function toggleTransaction(id: number, extend = false) {
-    setSelection(previous => extend ? selectRange(previous, order, id, id, false) : toggleRow(previous, id));
+    setSelection(previous =>
+      extend ? selectRange(previous, order, id, id, false) : toggleRow(previous, id),
+    );
   }
 
   function toggleFocused() {
-    if (active !== undefined) toggleTransaction(active);
+    if (active !== undefined) {
+      toggleTransaction(active);
+    }
   }
 
   function extendToFocused() {
-    if (active !== undefined) setSelection(previous => selectRange(previous, order, active, active, false));
+    if (active !== undefined) {
+      setSelection(previous => selectRange(previous, order, active, active, false));
+    }
   }
 
   function selectAll() {
@@ -153,14 +234,19 @@ export function useTransactionGrid(rows: Row[], suspended: boolean, fallback: Re
   }
 
   function toggleAll() {
-    if (selected.size === order.length) clearSelection();
-    else selectAll();
+    if (selected.size === order.length) {
+      clearSelection();
+    } else {
+      selectAll();
+    }
   }
 
   function endRange() {
-    setSelection(previous => previous.range.size
-      ? {...previous, independent: selectedKeys(previous), range: new Set()}
-      : previous);
+    setSelection(previous =>
+      previous.range.size
+        ? {...previous, independent: selectedKeys(previous), range: new Set()}
+        : previous,
+    );
   }
 
   function clearSelection() {
@@ -171,32 +257,51 @@ export function useTransactionGrid(rows: Row[], suspended: boolean, fallback: Re
     clearSelection();
     setActive(undefined);
     const table = tableElement();
-    if (table) setTabStop(table);
+    if (table) {
+      setTabStop(table);
+    }
   }
 
   function onFocusCapture(event: FocusEvent<HTMLDivElement>) {
     const target = event.target;
-    if (!event.currentTarget.contains(target)) return;
+    if (!event.currentTarget.contains(target)) {
+      return;
+    }
 
     setHasFocus(true);
     setActive(rowId(target));
 
-    if (target === tableElement() && order.length) focusRow(order[0]);
-    else if (!target.closest('form')) setTabStop(target);
+    if (target === tableElement() && order.length) {
+      focusRow(order[0]);
+    } else if (!target.closest('form')) {
+      setTabStop(target);
+    }
   }
 
   function onBlurCapture(event: FocusEvent<HTMLDivElement>) {
     const container = event.currentTarget;
     if (!container.contains(event.relatedTarget)) {
-      queueMicrotask(() => { if (!container.contains(document.activeElement)) setHasFocus(false); });
+      queueMicrotask(() => {
+        if (!container.contains(document.activeElement)) {
+          setHasFocus(false);
+        }
+      });
     }
   }
 
   function onKeyDownCapture(event: KeyboardEvent<HTMLDivElement>) {
     const target = event.target;
-    if (!hasFocus || suspended || event.defaultPrevented || event.nativeEvent.isComposing
-      || !(target instanceof HTMLElement) || !event.currentTarget.contains(target)
-      || target.closest('textarea,input:not([type=checkbox]),[contenteditable=true]')) return;
+    if (
+      !hasFocus ||
+      suspended ||
+      event.defaultPrevented ||
+      event.nativeEvent.isComposing ||
+      !(target instanceof HTMLElement) ||
+      !event.currentTarget.contains(target) ||
+      target.closest('textarea,input:not([type=checkbox]),[contenteditable=true]')
+    ) {
+      return;
+    }
 
     const cell = target.closest<HTMLTableCellElement>('th,td');
     const row = target.closest<HTMLTableRowElement>('tr');
@@ -214,7 +319,9 @@ export function useTransactionGrid(rows: Row[], suspended: boolean, fallback: Re
         break;
       case 'PageDown':
       case 'PageUp': {
-        if (active === undefined || !row) return;
+        if (active === undefined || !row) {
+          return;
+        }
         event.preventDefault();
         const height = Math.min(event.currentTarget.clientHeight, window.innerHeight);
         const distance = Math.max(1, Math.floor(height / Math.max(1, row.offsetHeight)));
@@ -223,10 +330,18 @@ export function useTransactionGrid(rows: Row[], suspended: boolean, fallback: Re
       }
       case 'ArrowLeft':
       case 'ArrowRight':
-        if (!row || (event.shiftKey && target.matches('[aria-keyshortcuts~="Shift+ArrowLeft"]'))) return;
+        if (
+          !row ||
+          (event.shiftKey && target.matches('[aria-keyshortcuts~="Shift+ArrowLeft"]'))
+        ) {
+          return;
+        }
         event.preventDefault();
-        if (cell) focusCell(row, cell.cellIndex + (event.key === 'ArrowRight' ? 1 : -1));
-        else focusCell(row, event.key === 'ArrowRight' ? 0 : row.cells.length - 1);
+        if (cell) {
+          focusCell(row, cell.cellIndex + (event.key === 'ArrowRight' ? 1 : -1));
+        } else {
+          focusCell(row, event.key === 'ArrowRight' ? 0 : row.cells.length - 1);
+        }
         break;
       case 'Home':
       case 'End': {
@@ -234,7 +349,9 @@ export function useTransactionGrid(rows: Row[], suspended: boolean, fallback: Re
         if (event.metaKey || event.ctrlKey || !row) {
           event.preventDefault();
           const edge = rowElement(first ? order[0] : order.at(-1));
-          if (edge) focusCell(edge, first ? 0 : edge.cells.length - 1);
+          if (edge) {
+            focusCell(edge, first ? 0 : edge.cells.length - 1);
+          }
         } else {
           event.preventDefault();
           focusCell(row, first ? 0 : row.cells.length - 1);
@@ -242,7 +359,9 @@ export function useTransactionGrid(rows: Row[], suspended: boolean, fallback: Re
         break;
       }
       case ' ':
-        if (active === undefined || target.closest('button,input')) return;
+        if (active === undefined || target.closest('button,input')) {
+          return;
+        }
         event.preventDefault();
         toggleTransaction(active, event.shiftKey);
         break;
@@ -250,10 +369,31 @@ export function useTransactionGrid(rows: Row[], suspended: boolean, fallback: Re
   }
 
   return {
-    active, hasFocus, selected, focusedRow, selectedRows,
-    rowElement, focusRow, focusTarget, focusedTransaction, move, jumpToEdge, escape, toggleFocused, extendToFocused, endRange, clearSelection, reset, toggleRow: toggleTransaction, toggleAll,
+    active,
+    hasFocus,
+    selected,
+    focusedRow,
+    selectedRows,
+    rowElement,
+    cellElement,
+    focusRow,
+    focusTarget,
+    focusedTransaction,
+    move,
+    jumpToEdge,
+    escape,
+    toggleFocused,
+    extendToFocused,
+    endRange,
+    clearSelection,
+    reset,
+    toggleRow: toggleTransaction,
+    toggleAll,
     bindings: {ref, onFocusCapture, onBlurCapture, onKeyDownCapture},
   };
 }
 
-export type GridInteraction = Pick<ReturnType<typeof useTransactionGrid>, 'selected' | 'toggleRow' | 'toggleAll' | 'bindings'>;
+export type GridInteraction = Pick<
+  ReturnType<typeof useTransactionGrid>,
+  'selected' | 'toggleRow' | 'toggleAll' | 'bindings'
+>;

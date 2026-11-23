@@ -1,0 +1,4 @@
+[[repos]]
+repo = "https://github.com/evanpurkhiser/prek-personal"
+rev = "v1.0.2"
+hooks = [{ id = "oxfmt-system", priority = 10 }, { id = "oxlint-system", priority = 11 }]

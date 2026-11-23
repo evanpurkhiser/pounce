@@ -1,7 +1,9 @@
-import {toast} from 'sonner';
 import {useRef, useState} from 'react';
-import {message, type Edit, type Session} from './data';
+
+import {toast} from 'sonner';
+
 import type {Update} from './api';
+import {message, type Edit, type Session} from './data';
 
 export function useEdits(session: Session) {
   const [undo, setUndo] = useState<Edit[]>([]);
@@ -11,7 +13,9 @@ export function useEdits(session: Session) {
   const active = useRef(false);
 
   async function run(work: () => Promise<void>) {
-    if (active.current) return;
+    if (active.current) {
+      return;
+    }
     active.current = true;
     setBusy(true);
     setIssues([]);
@@ -33,7 +37,10 @@ export function useEdits(session: Session) {
       if (count) {
         setUndo([...undo, result.edit]);
         setRedo([]);
-        toast.success(label, {description: count + (count === 1 ? ' transaction saved' : ' transactions saved')});
+        toast.success(label, {
+          description:
+            count + (count === 1 ? ' transaction saved' : ' transactions saved'),
+        });
       } else if (!result.issues.length) {
         toast.info('No changes to save.');
       }
@@ -45,23 +52,40 @@ export function useEdits(session: Session) {
     const moveBack = direction === 'undo' ? setUndo : setRedo;
     const moveForward = direction === 'undo' ? setRedo : setUndo;
     const original = source.at(-1);
-    if (!original) return;
+    if (!original) {
+      return;
+    }
 
     void run(async () => {
       const result = await session.replay(original, direction);
       const completed = new Set(result.edit.changes.map(change => change.id));
       const remaining = original.changes.filter(change => !completed.has(change.id));
       const moved = original.changes.filter(change => completed.has(change.id));
-      if (result.issues.length) setIssues(result.issues);
+      if (result.issues.length) {
+        setIssues(result.issues);
+      }
       if (moved.length) {
-        moveBack([...source.slice(0, -1), ...(remaining.length ? [{...original, changes: remaining}] : [])]);
+        moveBack([
+          ...source.slice(0, -1),
+          ...(remaining.length ? [{...original, changes: remaining}] : []),
+        ]);
         moveForward(stack => [...stack, {...original, changes: moved}]);
-        toast.success(direction === 'undo' ? 'Undo complete' : 'Redo complete', {description: original.label});
+        toast.success(direction === 'undo' ? 'Undo complete' : 'Redo complete', {
+          description: original.label,
+        });
       } else if (!result.issues.length) {
         toast.info('No changes to save.');
       }
     });
   }
 
-  return {busy, issues, clearIssues: () => setIssues([]), canUndo: !!undo.length, canRedo: !!redo.length, save, replay};
+  return {
+    busy,
+    issues,
+    clearIssues: () => setIssues([]),
+    canUndo: Boolean(undo.length),
+    canRedo: Boolean(redo.length),
+    save,
+    replay,
+  };
 }

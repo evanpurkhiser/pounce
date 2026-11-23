@@ -1,21 +1,109 @@
-.backdrop { position: fixed; inset: 0; background: #10182866; z-index: 4; }
-.modal { position: fixed; top: 12vh; left: 50%; transform: translateX(-50%); width: min(34rem, calc(100vw - 2rem)); max-height: 80vh; overflow: auto; z-index: 5; background: white; border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 .5rem 2rem #10182840; }
-.cellEditorPositioner { z-index: 6; }
-.cellEditorPopup { width: min(19rem, calc(100vw - 1rem)); background: white; border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 .35rem 1rem #10182830; }
-.cellEditorPopup .choiceList { max-height: min(15rem, max(5rem, calc(var(--available-height) - 3rem))); }
-.modalHeading { padding: .6rem .75rem; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: .5rem; }
-.modalHeading h2 { margin: 0; flex: 1; }
-.searchInput { width: calc(100% - 1.5rem); margin: .7rem .75rem .25rem; }
-.choiceList { padding: .4rem .6rem; max-height: 45vh; overflow: auto; }
-.commandPalette [cmdk-list-sizer] { display: grid; grid-template-columns: 1.45rem minmax(0, 1fr) auto auto; column-gap: .5rem; }
-.commandPalette :is([cmdk-group], [cmdk-group-items], [cmdk-item]) { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; }
-.commandPalette :is([cmdk-group-heading], [cmdk-empty]) { grid-column: 1 / -1; }
-.commandIcon { grid-column: 1; }
-.commandLabel { grid-column: 2; }
-.commandDetail { grid-column: 3; white-space: nowrap; }
-.commandPalette [cmdk-item] kbd { grid-column: 4; }
-.commandPalette [cmdk-group-heading], .choiceGroupLabel { padding: .3rem .45rem; color: #4b5563; font-size: .85rem; }
-.choiceBadge { margin-inline-start: .25em; padding: .12em .4em; border-radius: .25em; background: #edf1f5; color: #4b5563; font-size: .76em; white-space: nowrap; }
-.mark { width: .9rem; text-align: center; }
-.empty { padding: .45rem .75rem; }
-.editorFooter { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; padding: .75rem; border-top: 1px solid var(--line); }
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: #10182866;
+  z-index: 4;
+}
+.modal {
+  position: fixed;
+  top: 12vh;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(34rem, calc(100vw - 2rem));
+  max-height: 80vh;
+  overflow: auto;
+  z-index: 5;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 0.5rem 2rem #10182840;
+}
+.cellEditorPositioner {
+  z-index: 6;
+}
+.cellEditorPopup {
+  width: min(19rem, calc(100vw - 1rem));
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 0.35rem 1rem #10182830;
+}
+.cellEditorPopup .choiceList {
+  max-height: min(15rem, max(5rem, calc(var(--available-height) - 3rem)));
+}
+.modalHeading {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.modalHeading h2 {
+  margin: 0;
+  flex: 1;
+}
+.searchInput {
+  width: calc(100% - 1.5rem);
+  margin: 0.7rem 0.75rem 0.25rem;
+}
+.choiceList {
+  padding: 0.4rem 0.6rem;
+  max-height: 45vh;
+  overflow: auto;
+}
+.commandPalette [cmdk-list-sizer] {
+  display: grid;
+  grid-template-columns: 1.45rem minmax(0, 1fr) auto auto;
+  column-gap: 0.5rem;
+}
+.commandPalette :is([cmdk-group], [cmdk-group-items], [cmdk-item]) {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+}
+.commandPalette :is([cmdk-group-heading], [cmdk-empty]) {
+  grid-column: 1 / -1;
+}
+.commandIcon {
+  grid-column: 1;
+}
+.commandLabel {
+  grid-column: 2;
+}
+.commandDetail {
+  grid-column: 3;
+  white-space: nowrap;
+}
+.commandPalette [cmdk-item] kbd {
+  grid-column: 4;
+}
+.commandPalette [cmdk-group-heading],
+.choiceGroupLabel {
+  padding: 0.3rem 0.45rem;
+  color: #4b5563;
+  font-size: 0.85rem;
+}
+.choiceBadge {
+  margin-inline-start: 0.25em;
+  padding: 0.12em 0.4em;
+  border-radius: 0.25em;
+  background: #edf1f5;
+  color: #4b5563;
+  font-size: 0.76em;
+  white-space: nowrap;
+}
+.mark {
+  width: 0.9rem;
+  text-align: center;
+}
+.empty {
+  padding: 0.45rem 0.75rem;
+}
+.editorFooter {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.75rem;
+  border-top: 1px solid var(--line);
+}
