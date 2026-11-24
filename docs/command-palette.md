@@ -246,10 +246,11 @@ While editing text, those shortcuts operate on the text.
 Transaction history stays available across month changes in the same budget.
 
 Edits appear immediately and save in order.
-Undo removes the newest queued edit before sending it to Lunch Money.
+Undo removes the newest unsent edit from the queue.
 Redo puts that edit back in the queue.
-When the newest edit is already saving,
-undo becomes available after confirmation.
+If the newest edit is already saving, undo queues its reversal.
+Undo and redo update the table immediately.
+Reversals wait for earlier saves and use only confirmed changes.
 
 A confirmed action is one history entry, including a bulk edit.
 Undo restores the previous field values and redo reapplies the saved values.

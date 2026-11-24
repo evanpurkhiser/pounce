@@ -372,3 +372,88 @@ test('a rejected save discards the queue and keeps confirmed edits undoable', as
   await expect(note).toBeEmpty();
   await expect(page.getByRole('button', {name: 'Undo', exact: true})).toHaveCount(0);
 });
+
+test('rapid undo and redo queue reverse writes in order', async ({page}) => {
+  const {requests, note, changeNote, finishWrite} = await openWithPausedWrites(page);
+  const values = ['First note', 'Second note', 'Third note'];
+  for (const [index, value] of values.entries()) {
+    await changeNote(value);
+    await finishWrite(index);
+    await expect(page.getByText('Saving…', {exact: true})).toBeHidden();
+  }
+
+  for (const value of ['Second note', 'First note', '']) {
+    await page.keyboard.press('Control+z');
+    await expect(note).toHaveText(value);
+  }
+  await expect.poll(() => requests).toEqual([...values, 'Second note']);
+  for (const index of [3, 4, 5]) {
+    await finishWrite(index);
+  }
+  await expect(page.getByText('Saving…', {exact: true})).toBeHidden();
+  expect(requests).toEqual([...values, 'Second note', 'First note', '']);
+
+  for (const value of values) {
+    await page.keyboard.press('Control+Shift+z');
+    await expect(note).toHaveText(value);
+  }
+  await expect
+    .poll(() => requests)
+    .toEqual([...values, 'Second note', 'First note', '', 'First note']);
+  for (const index of [6, 7, 8]) {
+    await finishWrite(index);
+  }
+  await expect(page.getByText('Saving…', {exact: true})).toBeHidden();
+  expect(requests).toEqual([...values, 'Second note', 'First note', '', ...values]);
+});
+
+test('undo queues behind a save already in flight after canceling newer drafts', async ({
+  page,
+}) => {
+  const {requests, note, changeNote, finishWrite} = await openWithPausedWrites(page);
+  await changeNote('In flight');
+  await expect.poll(() => requests).toEqual(['In flight']);
+  await changeNote('First draft');
+  await changeNote('Second draft');
+
+  for (const value of ['First draft', 'In flight', '']) {
+    await page.keyboard.press('Control+z');
+    await expect(note).toHaveText(value);
+  }
+  expect(requests).toEqual(['In flight']);
+
+  await finishWrite(0);
+  await expect.poll(() => requests).toEqual(['In flight', '']);
+  await page.keyboard.press('Control+Shift+z');
+  await expect(note).toHaveText('In flight');
+  expect(requests).toEqual(['In flight', '']);
+
+  await finishWrite(1);
+  await expect.poll(() => requests).toEqual(['In flight', '', 'In flight']);
+  await finishWrite(2);
+  await expect(page.getByText('Saving…', {exact: true})).toBeHidden();
+  await expect(note).toHaveText('In flight');
+
+  await page.keyboard.press('Control+Shift+z');
+  await expect(note).toHaveText('First draft');
+  await finishWrite(3);
+  await expect(page.getByText('Saving…', {exact: true})).toBeHidden();
+  expect(requests).toEqual(['In flight', '', 'In flight', 'First draft']);
+});
+
+test('undo of an in-flight save is discarded if the original write fails', async ({
+  page,
+}) => {
+  const {requests, note, changeNote, finishWrite} = await openWithPausedWrites(page, 0);
+  await changeNote('In flight');
+  await expect.poll(() => requests).toEqual(['In flight']);
+  await page.keyboard.press('Control+z');
+  await expect(note).toBeEmpty();
+
+  await finishWrite(0);
+  await expect(page.getByRole('alert')).toContainText('1 queued edit was discarded');
+  await expect(page.getByText('Saving…', {exact: true})).toBeHidden();
+  await expect(note).toBeEmpty();
+  await expect(page.getByRole('button', {name: 'Redo', exact: true})).toHaveCount(0);
+  expect(requests).toEqual(['In flight']);
+});

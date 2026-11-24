@@ -43,6 +43,30 @@ function patchKeys(patch: Patch) {
   return Object.keys(patch) as EditableKey[];
 }
 
+export function partitionReplay(edit: Edit, receipt: Edit) {
+  const saved = new Map(receipt.changes.map(change => [change.id, change.after]));
+  const moved: Change[] = [];
+  const remaining: Change[] = [];
+  for (const {id, before, after} of edit.changes) {
+    const confirmed = saved.get(id);
+    const fields = patchKeys(after);
+    const split = (keys: EditableKey[]) => ({
+      id,
+      before: Object.fromEntries(keys.map(key => [key, before[key]])),
+      after: Object.fromEntries(keys.map(key => [key, after[key]])),
+    });
+    const accepted = fields.filter(key => confirmed && Object.hasOwn(confirmed, key));
+    const rejected = fields.filter(key => !accepted.includes(key));
+    if (accepted.length) {
+      moved.push(split(accepted));
+    }
+    if (rejected.length) {
+      remaining.push(split(rejected));
+    }
+  }
+  return {moved, remaining};
+}
+
 function tagChanges(before: number[], after: number[]) {
   return {
     added: after.filter(id => !before.includes(id)),
@@ -55,17 +79,37 @@ function applyTagChanges(current: number[], added: number[], removed: number[]) 
 }
 
 export type QueuedUpdate = Update & {tags?: ReturnType<typeof tagChanges>};
+export type DraftUpdate = QueuedUpdate & {before: Patch};
+export type ReplayDirection = 'undo' | 'redo';
 
-export function queueUpdate(row: Row, patch: Patch): QueuedUpdate | undefined {
-  if (patchKeys(patch).every(key => equal(key, row[key], patch[key]))) {
+export function queueUpdate(row: Row, patch: Patch): DraftUpdate | undefined {
+  const fields = patchKeys(patch).filter(key => !equal(key, row[key], patch[key]));
+  if (!fields.length) {
     return;
   }
 
   return {
     id: row.id,
-    patch,
-    tags: patch.tag_ids && tagChanges(row.tag_ids, patch.tag_ids),
+    patch: Object.fromEntries(fields.map(key => [key, patch[key]])),
+    before: patchValues(row, fields),
+    tags:
+      fields.includes('tag_ids') && patch.tag_ids
+        ? tagChanges(row.tag_ids, patch.tag_ids)
+        : undefined,
   };
+}
+
+export function replayUpdates(edit: Edit, direction: ReplayDirection): QueuedUpdate[] {
+  const from = direction === 'undo' ? 'after' : 'before';
+  const to = direction === 'undo' ? 'before' : 'after';
+  return edit.changes.map(change => {
+    const patch = change[to];
+    return {
+      id: change.id,
+      patch,
+      tags: patch.tag_ids && tagChanges(change[from].tag_ids ?? [], patch.tag_ids),
+    };
+  });
 }
 
 export function resolveUpdate(update: QueuedUpdate, row: Row): Patch {
@@ -333,36 +377,32 @@ export function createSession(source: DataSource) {
     });
   }
 
-  function replay(edit: Edit, direction: 'undo' | 'redo') {
+  function replay(edit: Edit, direction: ReplayDirection) {
     const from = direction === 'undo' ? 'after' : 'before';
-    const to = direction === 'undo' ? 'before' : 'after';
     return write(edit.label, async () => {
       const fresh = await getCurrent(edit.changes.map(change => change.id));
       for (const row of fresh) {
         mergeRow(row);
       }
 
-      return edit.changes.map((change, index) => {
+      return replayUpdates(edit, direction).map((update, index) => {
         const current = fresh[index];
-        const fields = patchKeys(change[to]);
+        const fields = patchKeys(update.patch);
         const conflicts = fields.filter(
-          key => key !== 'tag_ids' && !equal(key, current[key], change[from][key]),
+          key =>
+            key !== 'tag_ids' &&
+            !equal(key, current[key], edit.changes[index][from][key]),
         );
         if (conflicts.length) {
           throw new Error(
             'Transaction #' +
-              change.id +
+              update.id +
               ' changed in Lunch Money (' +
               conflicts.join(', ') +
               ').',
           );
         }
-        const patch = {...change[to]};
-        if (patch.tag_ids) {
-          const {added, removed} = tagChanges(change[from].tag_ids ?? [], patch.tag_ids);
-          patch.tag_ids = applyTagChanges(current.tag_ids, added, removed);
-        }
-        return {id: current.id, patch};
+        return update;
       });
     });
   }

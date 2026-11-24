@@ -292,7 +292,7 @@ function Workspace({
   }
 
   function showEditor(field: Field, rows: Row[]) {
-    if (!rows.length || !edits.canEdit) {
+    if (!rows.length) {
       return;
     }
 
@@ -343,7 +343,7 @@ function Workspace({
   const canNavigateRows = !suspended && visible.length > 0;
   const rowNavigationKeys = canNavigateRows && letterKeys;
   const enterGridKeys = canNavigateRows && !grid.hasFocus;
-  const readyForEdit = edits.canEdit && !load.isPending;
+  const readyForEdit = !load.isPending;
   function keyboardTargets() {
     const row = grid.focusedTransaction();
     if (row) {
