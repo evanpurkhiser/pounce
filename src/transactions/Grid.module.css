@@ -126,6 +126,9 @@
 .cellAction:hover {
   text-decoration: underline;
 }
+[data-editor-cell='date'] > .cellAction {
+  font-variant-numeric: tabular-nums;
+}
 [data-editor-cell='payee'] {
   font-weight: 650;
 }
