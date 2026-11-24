@@ -217,6 +217,12 @@ td.amount:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.cellAction > .tagList {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: center;
+  gap: 0.2rem;
+}
 .grid .reviewCell {
   text-align: center;
 }

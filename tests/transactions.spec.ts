@@ -388,7 +388,10 @@ test('bulk tag picker keeps mixed memberships until Apply and preserves other ta
   await expect(dialog(page).getByRole('button', {name: 'Apply tags'})).toBeEnabled();
   await expect(row(page, 2)).not.toContainText('Travel');
   await dialog(page).getByRole('button', {name: 'Apply tags'}).click();
-  await expect(row(page, 2)).toContainText('Work, Travel');
+  await expect(row(page, 2).locator('[data-editor-cell=tags] [title]')).toHaveText([
+    'Work',
+    'Travel',
+  ]);
   await expect(row(page, 1)).toContainText('Travel');
 });
 
@@ -1056,7 +1059,9 @@ test('F opens filters, Ctrl+F clears facets and search, and G T returns to this 
   await expect(dialog(page)).toHaveAccessibleName('Filter');
   await dialog(page).getByRole('option', {name: 'Tag', exact: true}).click();
   await expect(dialog(page).getByRole('option')).toHaveText(['Shared', 'Travel', 'Work']);
-  await dialog(page).getByRole('option', {name: 'Travel'}).click();
+  const travel = dialog(page).getByRole('option', {name: 'Travel'});
+  await expect(travel.getByTitle('Travel')).toBeVisible();
+  await travel.click();
   await expect(page.getByRole('button', {name: 'Remove filter Travel'})).toBeVisible();
 
   const search = page.getByRole('button', {name: 'Search', exact: true});

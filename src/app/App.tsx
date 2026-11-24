@@ -21,7 +21,6 @@ import {
   monthLabel,
   monthRange,
   shiftMonth,
-  type Choice,
   type Range,
   type Row,
 } from '../data/api';
@@ -54,6 +53,7 @@ import {
   tableCommand,
   transactionCommands,
 } from '../transactions/transactionCommands';
+import {TransactionTag} from '../transactions/TransactionTag';
 import type {Facet, MultiValueFacet} from '../transactions/transactionView';
 import {useTransactionGrid} from '../transactions/useTransactionGrid';
 import {useTransactionView} from '../transactions/useTransactionView';
@@ -170,11 +170,14 @@ function Workspace({
   const load = useTransactionPages(session, range);
   const {data: allRows = []} = useLiveQuery(session.rows);
   const postedRows = useMemo(() => allRows.filter(row => !row.is_pending), [allRows]);
-  const choices = useMemo<Record<Facet, readonly Choice[]>>(
+  const choices = useMemo(
     () => ({
       review: reviews,
       category: metadata?.categories ?? [],
-      tag: metadata?.tags.toSorted((a, b) => a.label.localeCompare(b.label)) ?? [],
+      tag:
+        metadata?.tags
+          .toSorted((a, b) => a.label.localeCompare(b.label))
+          .map(tag => ({...tag, labelContent: <TransactionTag {...tag} />})) ?? [],
       account: metadata?.accounts ?? [],
     }),
     [metadata],

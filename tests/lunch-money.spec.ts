@@ -91,8 +91,9 @@ test('loads a connected budget, handles API errors, and restores the connection 
       case '/tags':
         return json({
           tags: [
-            {id: 1, name: 'Travel'},
-            {id: 2, name: 'Work'},
+            {id: 1, name: 'Travel', text_color: '15734E', background_color: 'CFF4F3'},
+            {id: 2, name: 'Work', text_color: '333333', background_color: 'EEE'},
+            {id: 3, name: 'Shared', text_color: '333', background_color: '#D7F5CC'},
           ],
         });
       case '/manual_accounts':
@@ -134,6 +135,35 @@ test('loads a connected budget, handles API errors, and restores the connection 
   await expect(page.locator('[data-row-id="12"]')).toBeVisible();
   expect(offsets).toEqual(['0', '1000', '1000']);
 
+  const travelTag = page
+    .locator('[data-row-id="1"] [data-editor-cell=tags]')
+    .getByTitle('Travel');
+  await expect(travelTag).toHaveCSS('color', /^oklch\(0\.49 /);
+  const travelColor = await travelTag.evaluate(tag => getComputedStyle(tag).color);
+  await expect(travelTag).toHaveCSS('border-top-color', travelColor);
+  await expect(travelTag).toHaveCSS(
+    'background-color',
+    /^color\(srgb 0\.9\d+ 0\.9\d+ 0\.9\d+\)$/,
+  );
+  const workTag = page
+    .locator('[data-row-id="2"] [data-editor-cell=tags]')
+    .getByTitle('Work');
+  await expect(workTag).toHaveCSS('color', 'rgb(105, 105, 105)');
+  await expect(workTag).toHaveCSS('border-top-color', 'rgb(105, 105, 105)');
+  await page.emulateMedia({colorScheme: 'dark'});
+  await expect(travelTag).toHaveCSS('color', 'rgb(207, 244, 243)');
+  await expect(travelTag).toHaveCSS('border-top-color', 'rgb(207, 244, 243)');
+  await expect(travelTag).toHaveCSS(
+    'background-color',
+    /^color\(srgb 0\.2\d+ 0\.2\d+ 0\.2\d+\)$/,
+  );
+  await expect(
+    page.locator('[data-row-id="3"] [data-editor-cell=tags]').getByTitle('Shared'),
+  ).toHaveCSS('color', 'rgb(215, 245, 204)');
+  await expect(workTag).toHaveCSS('color', 'rgb(184, 184, 184)');
+  await expect(workTag).toHaveCSS('border-top-color', 'rgb(184, 184, 184)');
+  await page.emulateMedia({colorScheme: null});
+
   for (const [id, label] of [
     [2, 'Split transaction'],
     [3, 'Recurring transaction'],
@@ -162,9 +192,21 @@ test('loads a connected budget, handles API errors, and restores the connection 
   ]) {
     await page.keyboard.press(key);
     await expect(page.getByRole('dialog')).toHaveAccessibleName(title);
+    if (key === 'T') {
+      const travel = page.getByRole('option', {name: 'Travel', exact: true});
+      await expect(travel.getByTitle('Travel')).toHaveCSS('color', travelColor);
+    }
     await page.keyboard.press('Escape');
     await expect(first).toBeFocused();
   }
+  await page.keyboard.press('Control+k');
+  await page.getByRole('combobox').fill('Filter Tag Travel');
+  const travelCommand = page.getByRole('option', {
+    name: 'Filter › Tag › Travel',
+    exact: true,
+  });
+  await expect(travelCommand.getByTitle('Travel')).toHaveCSS('color', travelColor);
+  await page.keyboard.press('Escape');
   expect(attempts).toBe(0);
 
   await page.keyboard.press('C');

@@ -33,7 +33,7 @@ import {
   categoryName,
   columns,
   reviewLabel,
-  tagNames,
+  transactionTags,
   type SortColumn,
   type SortDescriptor,
 } from './sorting';
@@ -45,6 +45,7 @@ import {
   type Field,
   type InlineEditorField,
 } from './transactionActions';
+import {TransactionTag} from './TransactionTag';
 import type {GridInteraction} from './useTransactionGrid';
 
 type InlineEditor = {
@@ -377,10 +378,11 @@ const TransactionRow = memo(function TransactionRow({
   const transaction = row.original;
   const {id, payee, date, notes} = transaction;
 
-  function editable(field: Field, text: string, ariaLabel?: string) {
+  function editable(field: Field, value: ReactNode, ariaLabel?: string) {
     const {label, cellLabel} = editActions[field];
     const name = ariaLabel ?? `${cellLabel ?? label} for ${payee}`;
-    const content = <span title={text || undefined}>{text}</span>;
+    const content =
+      typeof value === 'string' ? <span title={value || undefined}>{value}</span> : value;
 
     if (isCellEditorField(field)) {
       return (
@@ -477,7 +479,14 @@ const TransactionRow = memo(function TransactionRow({
           )
         );
       case 'tags':
-        return editable('tags', tagNames(transaction, metadata).join(', '));
+        return editable(
+          'tags',
+          <span className={styles.tagList}>
+            {transactionTags(transaction, metadata).map(tag => (
+              <TransactionTag key={tag.id} {...tag} />
+            ))}
+          </span>,
+        );
       case 'review': {
         const reviewed = transaction.status === 'reviewed';
         const Icon = reviewIcons[reviewed ? 'reviewed' : 'unreviewed'];

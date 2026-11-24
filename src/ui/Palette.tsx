@@ -186,7 +186,10 @@ export function CommandList({items}: {items: readonly CommandItem[]}) {
                     />
                   )
                 )}
-                <span className={styles.commandLabel}>{item.label}</span>
+                <span className={styles.commandLabel}>
+                  {item.labelPrefix && `${item.labelPrefix} › `}
+                  {item.labelContent ?? item.label}
+                </span>
                 {item.detail && (
                   <small className={styles.commandDetail}>{item.detail}</small>
                 )}
@@ -202,6 +205,7 @@ export function CommandList({items}: {items: readonly CommandItem[]}) {
 
 type PickItem = Searchable & {
   id: string;
+  labelContent?: ReactNode;
   detail?: string;
   group?: boolean;
   groupLabel?: string;
@@ -262,7 +266,7 @@ export function Picker({
       <Combobox.Item key={item.id} value={item} className={ui.choice}>
         {item.mark && <CheckboxIcon state={item.mark} />}
         <span>
-          {item.label}
+          {item.labelContent ?? item.label}
           {item.group && (
             <>
               {' '}

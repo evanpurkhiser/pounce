@@ -72,7 +72,10 @@ export function tableCommand(
 }
 
 export function filterCommands(
-  choices: Record<MultiValueFacet, readonly Choice[]>,
+  choices: Record<
+    MultiValueFacet,
+    ReadonlyArray<Choice & Pick<CommandItem, 'labelContent'>>
+  >,
   filters: TransactionFilters,
   actions: {
     chooseReview: (status: ReviewStatus | null) => void;
