@@ -139,8 +139,9 @@ and the shortcut-overlay binding while an editor or the palette owns focus.
 ## Command palette
 
 Open the palette with **⌘K** or **Ctrl+K**.
-Press **Ctrl+N** or **Ctrl+P** to move down or up through commands
-and picker results.
+In commands and picker results,
+press **Ctrl+N** or **Ctrl+J** to move down and **Ctrl+P**
+or **Ctrl+K** to move up.
 Table commands are always available on the Transactions screen.
 They include **Filter**, **Sort by**, **Search**, month navigation,
 and **Undo last edit** or **Redo last edit** when available.

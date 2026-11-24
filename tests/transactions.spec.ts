@@ -1089,7 +1089,7 @@ test('F opens filters, Ctrl+F clears facets and search, and G T returns to this 
   await expect(dialog(page)).toHaveCount(0);
 });
 
-test('Ctrl+N and Ctrl+P navigate commands and nested picker results', async ({page}) => {
+test('Control shortcuts navigate commands and nested picker results', async ({page}) => {
   await ready(page);
   await page.keyboard.press('Control+k');
   const input = dialog(page).getByRole('combobox');
@@ -1109,6 +1109,11 @@ test('Ctrl+N and Ctrl+P navigate commands and nested picker results', async ({pa
     await input.press('Control+n');
     await expect(input).toHaveAttribute('aria-activedescendant', next);
     await input.press('Control+p');
+    await expect(input).toHaveAttribute('aria-activedescendant', previous);
+
+    await input.press('Control+j');
+    await expect(input).toHaveAttribute('aria-activedescendant', next);
+    await input.press('Control+k');
     await expect(input).toHaveAttribute('aria-activedescendant', previous);
     await expect(input).toBeFocused();
   }

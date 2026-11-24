@@ -760,11 +760,13 @@ function Workspace({
                   <KeyboardShortcut keys={['cmd-k']} /> /{' '}
                   <KeyboardShortcut keys={['ctrl-k']} />
                 </dd>
-                <dt>Move through command results</dt>
+                <dt>Move through commands and picker results</dt>
                 <dd>
                   <KeyboardShortcut keys={['↑']} /> / <KeyboardShortcut keys={['↓']} /> or{' '}
                   <KeyboardShortcut keys={['ctrl-p']} /> /{' '}
-                  <KeyboardShortcut keys={['ctrl-n']} />
+                  <KeyboardShortcut keys={['ctrl-n']} /> or{' '}
+                  <KeyboardShortcut keys={['ctrl-k']} /> /{' '}
+                  <KeyboardShortcut keys={['ctrl-j']} />
                 </dd>
                 <dt>Undo / redo</dt>
                 <dd>

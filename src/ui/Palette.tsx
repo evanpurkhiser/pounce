@@ -82,6 +82,13 @@ export function useInitialFocus<T extends HTMLElement>(select = false) {
   return ref;
 }
 
+const controlNavigationKeys = new Map([
+  ['n', 'ArrowDown'],
+  ['j', 'ArrowDown'],
+  ['p', 'ArrowUp'],
+  ['k', 'ArrowUp'],
+]);
+
 function navigateWithControl(event: KeyboardEvent) {
   if (
     !event.ctrlKey ||
@@ -93,7 +100,7 @@ function navigateWithControl(event: KeyboardEvent) {
     return false;
   }
 
-  const key = event.key === 'n' ? 'ArrowDown' : event.key === 'p' ? 'ArrowUp' : undefined;
+  const key = controlNavigationKeys.get(event.key);
   if (!key) {
     return false;
   }
