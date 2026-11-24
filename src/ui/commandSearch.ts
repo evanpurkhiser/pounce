@@ -6,7 +6,7 @@ export type CommandItem = Searchable & {
   id: string;
   group: string;
   groupLabel?: string;
-  shortcut?: string;
+  shortcut?: readonly string[];
   detail?: string;
   icon?: LucideIcon;
   checked?: boolean;

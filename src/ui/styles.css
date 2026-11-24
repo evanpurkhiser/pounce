@@ -124,16 +124,6 @@ button:hover:not(:disabled) {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
-kbd {
-  font:
-    0.85em ui-monospace,
-    monospace;
-  background: var(--shortcut-surface);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 0.05em 0.3em;
-  white-space: nowrap;
-}
 h1,
 h2,
 h3,

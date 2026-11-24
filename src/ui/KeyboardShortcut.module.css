@@ -1,0 +1,27 @@
+.shortcut {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  font:
+    0.85em / 1 ui-monospace,
+    monospace;
+  background: var(--shortcut-surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.12em 0.3em;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.press {
+  display: flex;
+  align-items: center;
+  gap: 0.15em;
+  min-block-size: 1em;
+}
+.key {
+  text-box: trim-both cap alphabetic;
+}
+.press svg {
+  width: 1em;
+  height: 1em;
+}

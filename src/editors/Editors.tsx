@@ -25,6 +25,7 @@ import {Autocomplete} from '@base-ui/react/autocomplete';
 import {parseDate, type CalendarDate} from '@internationalized/date';
 
 import type {Choice, Range, Row} from '../data/api';
+import {KeyboardShortcut} from '../ui/KeyboardShortcut';
 import {Picker, useInitialFocus} from '../ui/Palette';
 import {rank} from '../ui/search';
 import ui from '../ui/ui.module.css';
@@ -431,7 +432,9 @@ export function TagPicker({
               Reset changes
             </button>
           )}
-          <small>Alt+Enter resets a tag</small>
+          <small>
+            <KeyboardShortcut keys={['alt-Enter']} /> resets a tag
+          </small>
         </>
       }
     />

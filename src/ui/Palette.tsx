@@ -11,6 +11,7 @@ import {Dialog} from '@base-ui/react/dialog';
 import {Command} from 'cmdk';
 
 import {searchCommands, type CommandItem} from './commandSearch';
+import {KeyboardShortcut} from './KeyboardShortcut';
 import styles from './Palette.module.css';
 import {rank, type Searchable} from './search';
 import ui from './ui.module.css';
@@ -52,7 +53,9 @@ export function Modal({
               </button>
             )}
             <Dialog.Title>{title}</Dialog.Title>
-            <Dialog.Close aria-label="Close">Esc</Dialog.Close>
+            <Dialog.Close aria-label="Close" aria-keyshortcuts="Escape">
+              <KeyboardShortcut keys={['Esc']} />
+            </Dialog.Close>
           </header>
           {children}
         </Dialog.Popup>
@@ -178,7 +181,7 @@ export function CommandList({items}: {items: readonly CommandItem[]}) {
                 {item.detail && (
                   <small className={styles.commandDetail}>{item.detail}</small>
                 )}
-                {item.shortcut && <kbd>{item.shortcut}</kbd>}
+                {item.shortcut && <KeyboardShortcut keys={item.shortcut} />}
               </Command.Item>
             ))}
           </Command.Group>

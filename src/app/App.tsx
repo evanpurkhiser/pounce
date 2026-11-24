@@ -57,6 +57,7 @@ import {
 import type {Facet, MultiValueFacet} from '../transactions/transactionView';
 import {useTransactionGrid} from '../transactions/useTransactionGrid';
 import {useTransactionView} from '../transactions/useTransactionView';
+import {KeyboardShortcut} from '../ui/KeyboardShortcut';
 import {CommandList, Modal, Picker, useInitialFocus} from '../ui/Palette';
 import paletteStyles from '../ui/Palette.module.css';
 import ui from '../ui/ui.module.css';
@@ -603,7 +604,10 @@ function Workspace({
               modifierToggle={id => view.toggleFacet(facet, id)}
               footer={
                 <>
-                  <small>⌘Enter / Ctrl+Enter toggles values</small>
+                  <small>
+                    <KeyboardShortcut keys={['cmd-Enter']} /> /{' '}
+                    <KeyboardShortcut keys={['ctrl-Enter']} /> toggles values
+                  </small>
                   <button type="button" onClick={close}>
                     Done
                   </button>
@@ -669,37 +673,103 @@ function Workspace({
             <div className={ui.editor}>
               <dl className={ui.descriptionList}>
                 <dt>Move between rows</dt>
-                <dd>↑ / ↓ or J / K</dd>
+                <dd>
+                  <KeyboardShortcut keys={['↑']} /> / <KeyboardShortcut keys={['↓']} /> or{' '}
+                  <KeyboardShortcut keys={['j']} /> / <KeyboardShortcut keys={['k']} />
+                </dd>
                 <dt>Move between columns</dt>
-                <dd>← / → or Tab / Shift+Tab</dd>
+                <dd>
+                  <KeyboardShortcut keys={['←']} /> / <KeyboardShortcut keys={['→']} /> or{' '}
+                  <KeyboardShortcut keys={['Tab']} /> /{' '}
+                  <KeyboardShortcut keys={['shift-Tab']} />
+                </dd>
                 <dt>Jump half a page up / down</dt>
-                <dd>Ctrl+U / Ctrl+D</dd>
+                <dd>
+                  <KeyboardShortcut keys={['ctrl-u']} /> /{' '}
+                  <KeyboardShortcut keys={['ctrl-d']} />
+                </dd>
                 <dt>First / last row</dt>
-                <dd>G G / Shift+G</dd>
+                <dd>
+                  <KeyboardShortcut keys={['g', 'g']} /> /{' '}
+                  <KeyboardShortcut keys={['shift-g']} />
+                </dd>
                 <dt>Select row or range</dt>
-                <dd>X, Shift+X, Shift+J/K, Shift+↑/↓</dd>
+                <dd>
+                  <KeyboardShortcut keys={['x']} />,{' '}
+                  <KeyboardShortcut keys={['shift-x']} />,{' '}
+                  <KeyboardShortcut keys={['shift-j']} /> /{' '}
+                  <KeyboardShortcut keys={['shift-k']} />,{' '}
+                  <KeyboardShortcut keys={['shift-↑']} /> /{' '}
+                  <KeyboardShortcut keys={['shift-↓']} />
+                </dd>
                 <dt>Select visible results</dt>
-                <dd>⌘A / Ctrl+A</dd>
+                <dd>
+                  <KeyboardShortcut keys={['cmd-a']} /> /{' '}
+                  <KeyboardShortcut keys={['ctrl-a']} />
+                </dd>
                 <dt>Edit fields</dt>
-                <dd>C category, P payee, D date, N note, T tags</dd>
+                <dd>
+                  <KeyboardShortcut keys={['c']} /> category,{' '}
+                  <KeyboardShortcut keys={['p']} /> payee,{' '}
+                  <KeyboardShortcut keys={['d']} /> date,{' '}
+                  <KeyboardShortcut keys={['n']} /> note,{' '}
+                  <KeyboardShortcut keys={['t']} /> tags
+                </dd>
                 <dt>Review</dt>
-                <dd>R</dd>
+                <dd>
+                  <KeyboardShortcut keys={[reviewShortcut]} />
+                </dd>
                 <dt>Toggle monthly budget</dt>
-                <dd>]</dd>
+                <dd>
+                  <KeyboardShortcut keys={[']']} />
+                </dd>
                 <dt>Sort by</dt>
-                <dd>S</dd>
+                <dd>
+                  <KeyboardShortcut keys={['s']} />
+                </dd>
                 <dt>Filters</dt>
-                <dd>F open, Ctrl+F clear</dd>
+                <dd>
+                  <KeyboardShortcut keys={['f']} /> open,{' '}
+                  <KeyboardShortcut keys={['ctrl-f']} /> clear
+                </dd>
+                <dt>Toggle highlighted filter value</dt>
+                <dd>
+                  <KeyboardShortcut keys={['cmd-Enter']} /> /{' '}
+                  <KeyboardShortcut keys={['ctrl-Enter']} />
+                </dd>
+                <dt>Reset highlighted tag change</dt>
+                <dd>
+                  <KeyboardShortcut keys={['alt-Enter']} />
+                </dd>
                 <dt>Months</dt>
-                <dd>G N next, G P previous, G M go to month, G T current</dd>
+                <dd>
+                  <KeyboardShortcut keys={['g', 'n']} /> next,{' '}
+                  <KeyboardShortcut keys={['g', 'p']} /> previous,{' '}
+                  <KeyboardShortcut keys={['g', 'm']} /> go to month,{' '}
+                  <KeyboardShortcut keys={['g', 't']} /> current
+                </dd>
                 <dt>Clear focus or selection</dt>
-                <dd>Esc</dd>
+                <dd>
+                  <KeyboardShortcut keys={['Esc']} />
+                </dd>
                 <dt>Commands</dt>
-                <dd>⌘K / Ctrl+K</dd>
+                <dd>
+                  <KeyboardShortcut keys={['cmd-k']} /> /{' '}
+                  <KeyboardShortcut keys={['ctrl-k']} />
+                </dd>
                 <dt>Move through command results</dt>
-                <dd>↑ / ↓ or Ctrl+P / Ctrl+N</dd>
+                <dd>
+                  <KeyboardShortcut keys={['↑']} /> / <KeyboardShortcut keys={['↓']} /> or{' '}
+                  <KeyboardShortcut keys={['ctrl-p']} /> /{' '}
+                  <KeyboardShortcut keys={['ctrl-n']} />
+                </dd>
                 <dt>Undo / redo</dt>
-                <dd>⌘Z / ⌘⇧Z or Ctrl equivalents</dd>
+                <dd>
+                  <KeyboardShortcut keys={['cmd-z']} /> /{' '}
+                  <KeyboardShortcut keys={['cmd-shift-z']} /> or{' '}
+                  <KeyboardShortcut keys={['ctrl-z']} /> /{' '}
+                  <KeyboardShortcut keys={['ctrl-shift-z']} />
+                </dd>
               </dl>
               <label>
                 <input
@@ -742,7 +812,7 @@ function Workspace({
           {live ? 'Connection' : 'Connect Lunch Money'}
         </button>
         <button type="button" onClick={() => open({kind: 'shortcuts'})}>
-          Shortcuts <kbd>?</kbd>
+          Shortcuts <KeyboardShortcut keys={['?']} />
         </button>
         <button
           type="button"
@@ -750,7 +820,7 @@ function Workspace({
           onClick={() => open({kind: 'commands'})}
         >
           <Command className={ui.actionIcon} aria-hidden />
-          Commands <kbd>⌘K</kbd>
+          Commands <KeyboardShortcut keys={['cmd-k']} />
         </button>
       </header>
       <main className={styles.layout}>

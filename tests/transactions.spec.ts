@@ -372,6 +372,7 @@ test('bulk tag picker keeps mixed memberships until Apply and preserves other ta
   await page.keyboard.press('J');
   await page.keyboard.press('X');
   await page.keyboard.press('T');
+  await expect(dialog(page).locator('kbd svg.lucide-option')).toBeVisible();
   await expect(dialog(page).getByRole('option', {name: /Travel.*1 of 2/})).toBeVisible();
   await dialog(page).getByRole('combobox').fill('travel');
   await page.keyboard.press('Enter');
@@ -537,6 +538,28 @@ test('shortcut overlay restores focus and filter modifier adds a second category
   await row(page, 1).focus();
   await page.keyboard.press('Shift+/');
   await expect(dialog(page)).toHaveAccessibleName('Keyboard shortcuts');
+  await expect(
+    dialog(page).getByRole('button', {name: 'Close'}).locator('kbd'),
+  ).toBeVisible();
+  await expect(dialog(page).locator('kbd svg.lucide-option')).toBeVisible();
+  await expect(dialog(page).locator('kbd svg.lucide-arrow-left')).toBeVisible();
+  await expect(dialog(page).locator('kbd svg.lucide-arrow-right')).toBeVisible();
+  await expect(
+    dialog(page)
+      .locator('kbd')
+      .filter({hasText: 'Shift+Up Arrow'})
+      .locator('svg.lucide-arrow-up'),
+  ).toBeVisible();
+  await expect(
+    dialog(page)
+      .locator('kbd')
+      .filter({hasText: 'Shift+Down Arrow'})
+      .locator('svg.lucide-arrow-down'),
+  ).toBeVisible();
+  await expect(dialog(page).locator('kbd').filter({hasText: 'G, then G'})).toBeVisible();
+  const redoShortcut = dialog(page).locator('kbd').filter({hasText: 'Command+Shift+Z'});
+  await expect(redoShortcut.locator('svg.lucide-command')).toBeVisible();
+  await expect(redoShortcut.locator('svg.lucide-arrow-big-up')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(row(page, 1)).toBeFocused();
 
@@ -1040,7 +1063,8 @@ test('F opens filters, Ctrl+F clears facets and search, and G T returns to this 
   await dialog(page).getByRole('button', {name: 'Show results'}).click();
   await page.keyboard.press('Control+k');
   const clearFilters = dialog(page).getByRole('option', {name: /Clear filters/});
-  await expect(clearFilters.getByText('Ctrl+F', {exact: true})).toBeVisible();
+  await expect(clearFilters).toHaveAccessibleName('Clear filters Control+F');
+  await expect(clearFilters.locator('kbd svg.lucide-chevron-up')).toBeVisible();
   await clearFilters.click();
   await expect(page.getByRole('button', {name: 'Clear search'})).toHaveCount(0);
 
