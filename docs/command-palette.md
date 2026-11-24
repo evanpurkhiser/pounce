@@ -106,14 +106,18 @@ and clearing the filter leaves previously hidden rows unselected.
 | `Tab` / `Shift+Tab`                            | Enter the grid at its last focus, or the first row on first entry. Within a row, move between columns and leave the grid at either edge.                                          |
 | `J` / `K`                                      | Move row focus down / up. A focused cell keeps its column as you move. From outside the grid, `J` focuses the first visible row and `K` focuses the last.                         |
 | `G` then `G` / `Shift+G`                       | Jump to the first / last visible row. Keep the focused column and current selection.                                                                                              |
-| Arrow keys                                     | Move between rows or cells. Left and Right enter or move across the current row. Up and Down preserve the column when a cell has focus.                                           |
+| Arrow keys                                     | Move between rows or cells. Left and Right enter or move across the current row. Up and Down preserve the focused column.                                                         |
 | `Home` / `End`                                 | Focus the first or last cell in the row. Hold Ctrl to jump to the first or last cell in the grid.                                                                                 |
 | `Page Up` / `Page Down`                        | Move focus by roughly one viewport of transactions.                                                                                                                               |
+| `Ctrl+U` / `Ctrl+D`                            | Move focus up or down by roughly half a viewport of transactions. Keep the focused column and selection.                                                                          |
 | `X`                                            | Toggle the focused row's selection and set the anchor. A row checkbox also sets the anchor.                                                                                       |
 | `⌘A` / `Ctrl+A`                                | With grid focus, select all rows in the current filtered view, including rows outside the viewport. Keep focus on the active row. In a text input, select its text.               |
 | `Shift+X`                                      | Select the visible range from the anchor through the focused row without moving focus.                                                                                            |
 | `Shift+J` / `Shift+K` or `Shift+↓` / `Shift+↑` | Move focus down / up and adjust the range from the same anchor.                                                                                                                   |
 | `Esc`                                          | Close the active editor and discard its draft. On successive presses, clear the selection, return from cell focus to row focus, then leave the row. Skip steps that do not apply. |
+
+From outside the grid, a down arrow or Ctrl+D focuses the first visible row.
+An up arrow or Ctrl+U focuses the last visible row.
 
 Range shortcuts share one active range in the current visible order.
 If there is no visible anchor,

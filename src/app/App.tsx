@@ -337,7 +337,9 @@ function Workspace({
 
   const shortcutsEnabled = !suspended && letterKeys;
   const gridKeys = shortcutsEnabled && grid.hasFocus;
-  const rowNavigationKeys = shortcutsEnabled && visible.length > 0;
+  const canNavigateRows = !suspended && visible.length > 0;
+  const rowNavigationKeys = canNavigateRows && letterKeys;
+  const enterGridKeys = canNavigateRows && !grid.hasFocus;
   const readyForEdit = !edits.busy && !load.isPending;
   function keyboardTargets() {
     const row = grid.focusedTransaction();
@@ -417,6 +419,22 @@ function Workspace({
       hotkey: 'Shift+G',
       callback: () => grid.jumpToEdge('last'),
       options: {enabled: rowNavigationKeys},
+    },
+    {
+      hotkey: 'ArrowDown',
+      callback: () => grid.move(1),
+      options: {enabled: enterGridKeys},
+    },
+    {hotkey: 'ArrowUp', callback: () => grid.move(-1), options: {enabled: enterGridKeys}},
+    {
+      hotkey: 'Control+D',
+      callback: () => grid.move(1, false, 0.5),
+      options: {enabled: canNavigateRows, ignoreInputs: true},
+    },
+    {
+      hotkey: 'Control+U',
+      callback: () => grid.move(-1, false, 0.5),
+      options: {enabled: canNavigateRows, ignoreInputs: true},
     },
     {hotkey: 'J', callback: () => grid.move(1), options: {enabled: rowNavigationKeys}},
     {hotkey: 'K', callback: () => grid.move(-1), options: {enabled: rowNavigationKeys}},
@@ -654,6 +672,8 @@ function Workspace({
                 <dd>↑ / ↓ or J / K</dd>
                 <dt>Move between columns</dt>
                 <dd>← / → or Tab / Shift+Tab</dd>
+                <dt>Jump half a page up / down</dt>
+                <dd>Ctrl+U / Ctrl+D</dd>
                 <dt>First / last row</dt>
                 <dd>G G / Shift+G</dd>
                 <dt>Select row or range</dt>

@@ -700,16 +700,26 @@ test('Enter saves notes and pasted line breaks become spaces', async ({page}) =>
   await expect(noteCell(2)).toHaveText('Joint note');
 });
 
-test('posted rows are visible on arrival and J and K enter the grid', async ({page}) => {
+test('vertical navigation enters the grid at the first or last visible row', async ({
+  page,
+}) => {
   await ready(page);
+  const grid = page.getByRole('grid', {name: 'Transactions'});
   await expect(row(page, 8)).toHaveCount(0);
-  await expect(row(page, 12)).toBeVisible();
-  await page.keyboard.press('J');
-  await expect(row(page, 1)).toBeFocused();
-  await page.reload();
-  await expect(row(page, 12)).toBeVisible();
-  await page.keyboard.press('K');
-  await expect(row(page, 12)).toBeFocused();
+
+  for (const [key, id] of [
+    ['J', 1],
+    ['K', 12],
+    ['ArrowDown', 1],
+    ['ArrowUp', 12],
+    ['Control+d', 1],
+    ['Control+u', 12],
+  ] as const) {
+    await expect(grid.locator(':focus')).toHaveCount(0);
+    await page.keyboard.press(key);
+    await expect(row(page, id)).toBeFocused();
+    await page.keyboard.press('Escape');
+  }
 });
 
 test('grid has one tab stop and preserves row and cell focus through keyboard navigation', async ({
@@ -816,6 +826,30 @@ test('G G and Shift+G jump to the first and last row while preserving column foc
   await expect(date(12)).toBeFocused();
   await expect(selection(page)).toHaveCount(1);
   await expect(row(page, 12)).toHaveAttribute('aria-selected', 'true');
+});
+
+test('Ctrl+U and Ctrl+D jump half a viewport while preserving column and selection', async ({
+  page,
+}) => {
+  await page.setViewportSize({width: 1200, height: 360});
+  await ready(page);
+  const date = (id: number) => row(page, id).getByRole('button', {name: /Change date/});
+
+  await date(1).focus();
+  await page.keyboard.press('X');
+  await page.keyboard.press('Control+d');
+  await expect(date(5)).toBeFocused();
+  await page.keyboard.press('Control+u');
+  await expect(date(1)).toBeFocused();
+
+  await page.setViewportSize({width: 1200, height: 220});
+  await page.keyboard.press('Control+d');
+  await expect(date(3)).toBeFocused();
+  await page.keyboard.press('Control+u');
+  await page.keyboard.press('Control+u');
+  await expect(date(1)).toBeFocused();
+  await expect(selection(page)).toHaveCount(1);
+  await expect(row(page, 1)).toHaveAttribute('aria-selected', 'true');
 });
 
 test('keyboard focus uses scroll padding and stays put at the end of the grid', async ({

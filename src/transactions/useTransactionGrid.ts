@@ -138,7 +138,7 @@ export function useTransactionGrid(
     previousOrder.current = order;
   }, [visible, active, hasFocus, suspended, order]);
 
-  function move(direction: -1 | 1, extend = false, distance = 1) {
+  function move(direction: -1 | 1, extend = false, pageFraction?: number) {
     if (!order.length) {
       return;
     }
@@ -155,6 +155,17 @@ export function useTransactionGrid(
 
     const from = rowId(focused);
     const index = from === undefined ? -1 : order.indexOf(from);
+    const pageRow = pageFraction && focused?.closest<HTMLTableRowElement>('tr');
+    const distance =
+      pageFraction && pageRow && ref.current
+        ? Math.max(
+            1,
+            Math.floor(
+              (Math.min(ref.current.clientHeight, window.innerHeight) * pageFraction) /
+                Math.max(1, pageRow.offsetHeight),
+            ),
+          )
+        : 1;
     const to =
       order[
         index < 0
@@ -168,7 +179,7 @@ export function useTransactionGrid(
     }
     if (column === undefined) {
       focusRow(to);
-    } else if (direction < 0 && index === 0 && distance === 1 && !extend) {
+    } else if (direction < 0 && index === 0 && pageFraction === undefined && !extend) {
       focusCell(tableElement()?.tHead?.rows[0] ?? null, column);
     } else {
       focusCell(rowElement(to), column);
@@ -324,9 +335,7 @@ export function useTransactionGrid(
           return;
         }
         event.preventDefault();
-        const height = Math.min(event.currentTarget.clientHeight, window.innerHeight);
-        const distance = Math.max(1, Math.floor(height / Math.max(1, row.offsetHeight)));
-        move(event.key === 'PageDown' ? 1 : -1, event.shiftKey, distance);
+        move(event.key === 'PageDown' ? 1 : -1, event.shiftKey, 1);
         break;
       }
       case 'Tab':
