@@ -1397,6 +1397,7 @@ test('bulk commands align counts and R reviews the selection with confirmation',
   await expect(
     dialog(page)
       .getByRole('option', {name: /Mark 2 reviewed/})
+      .locator('kbd [aria-hidden="true"]')
       .getByText('R', {exact: true}),
   ).toBeVisible();
   await page.keyboard.press('Escape');
