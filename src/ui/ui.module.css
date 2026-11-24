@@ -18,6 +18,16 @@
   overflow: hidden;
   clip-path: inset(50%);
 }
+.checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+}
+.checkbox:has(> :focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
 .choice {
   padding: 0.38rem 0.45rem;
   display: flex;

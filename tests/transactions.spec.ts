@@ -36,7 +36,9 @@ test('keyboard range shrinks to its anchor, reverses, and honors filtered select
   await page.getByRole('button', {name: 'Commands'}).click();
   await dialog(page).getByRole('combobox').fill('filter resturaunts');
   await expect(
-    dialog(page).getByRole('option', {name: 'Filter › Category › Food › Dining out'}),
+    dialog(page)
+      .getByRole('option', {name: 'Filter › Category › Food › Dining out'})
+      .locator('svg.lucide-square'),
   ).toBeVisible();
   await page.keyboard.press('Enter');
   await expect(selection(page)).toHaveCount(2);
@@ -49,13 +51,17 @@ test('selection and mixed selection marks are centered in their checkboxes', asy
 }) => {
   await ready(page);
   const selected = row(page, 1).getByRole('checkbox');
+  await expect(selected.locator('..').locator('svg.lucide-square')).toBeVisible();
   await selected.check();
 
   const selectAll = page.getByRole('checkbox', {name: 'Select all visible transactions'});
   await expect(selectAll).toHaveJSProperty('indeterminate', true);
-  for (const checkbox of [selected, selectAll]) {
+  for (const [checkbox, iconClass] of [
+    [selected, 'lucide-square-check-big'],
+    [selectAll, 'lucide-square-minus'],
+  ] as const) {
     const label = checkbox.locator('..');
-    const mark = label.locator('svg');
+    const mark = label.locator(`svg.${iconClass}`);
     await expect(mark).toBeVisible();
     const box = (await label.boundingBox())!;
     const icon = (await mark.boundingBox())!;
@@ -94,7 +100,7 @@ test('one selected row opens a searchable category dropdown at its cell', async 
   await expect(search).toBeFocused();
   for (const prefix of ['re', 'res']) {
     await search.fill(prefix);
-    await expect(picker.getByRole('option')).toHaveText(['□Dining out']);
+    await expect(picker.getByRole('option')).toHaveText(['Dining out']);
   }
   await search.fill('resturaunts');
   await page.keyboard.press('Enter');
@@ -373,9 +379,12 @@ test('bulk tag picker keeps mixed memberships until Apply and preserves other ta
   await page.keyboard.press('X');
   await page.keyboard.press('T');
   await expect(dialog(page).locator('kbd svg.lucide-option')).toBeVisible();
-  await expect(dialog(page).getByRole('option', {name: /Travel.*1 of 2/})).toBeVisible();
+  const travel = dialog(page).getByRole('option', {name: /Travel/});
+  await expect(travel).toHaveText(/Travel.*1 of 2/);
+  await expect(travel.locator('svg.lucide-square-minus')).toBeVisible();
   await dialog(page).getByRole('combobox').fill('travel');
   await page.keyboard.press('Enter');
+  await expect(travel.locator('svg.lucide-square-check-big')).toBeVisible();
   await expect(dialog(page).getByRole('button', {name: 'Apply tags'})).toBeEnabled();
   await expect(row(page, 2)).not.toContainText('Travel');
   await dialog(page).getByRole('button', {name: 'Apply tags'}).click();
@@ -567,7 +576,10 @@ test('shortcut overlay restores focus and filter modifier adds a second category
   await dialog(page).getByRole('option', {name: 'Category', exact: true}).click();
   const search = dialog(page).getByRole('combobox');
   await search.fill('groceries');
+  const groceries = dialog(page).getByRole('option', {name: 'Groceries', exact: true});
+  await expect(groceries.locator('svg.lucide-square')).toBeVisible();
   await page.keyboard.press('Control+Enter');
+  await expect(groceries.locator('svg.lucide-square-check-big')).toBeVisible();
   await expect(
     page.getByRole('button', {name: 'Remove filter Groceries', includeHidden: true}),
   ).toBeAttached();

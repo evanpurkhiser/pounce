@@ -21,10 +21,11 @@ import {
   type Header,
   type Row as TableRow,
 } from '@tanstack/react-table';
-import {Check, Minus, Repeat2, Split} from 'lucide-react';
+import {Check, Repeat2, Split} from 'lucide-react';
 
 import {money, type Metadata, type Row} from '../data/api';
 import {NoteEditor, PayeeEditor} from '../editors/Editors';
+import {CheckboxIcon} from '../ui/CheckboxIcon';
 import ui from '../ui/ui.module.css';
 
 import styles from './Grid.module.css';
@@ -551,7 +552,6 @@ function GridCheckbox({
   change: (extend: boolean) => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
-  const Mark = mixed ? Minus : checked ? Check : null;
 
   useLayoutEffect(() => {
     if (input.current) {
@@ -560,7 +560,7 @@ function GridCheckbox({
   }, [mixed]);
 
   return (
-    <label className={styles.gridCheckbox}>
+    <label className={`${ui.checkbox} ${styles.gridCheckbox}`}>
       <input
         ref={input}
         type="checkbox"
@@ -573,7 +573,10 @@ function GridCheckbox({
           change(event.nativeEvent instanceof MouseEvent && event.nativeEvent.shiftKey)
         }
       />
-      {Mark && <Mark className={styles.checkboxMark} strokeWidth={3} aria-hidden />}
+      <CheckboxIcon
+        className={styles.checkboxMark}
+        state={mixed ? 'mixed' : checked ? 'checked' : 'unchecked'}
+      />
     </label>
   );
 }

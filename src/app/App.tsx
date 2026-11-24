@@ -57,6 +57,7 @@ import {
 import type {Facet, MultiValueFacet} from '../transactions/transactionView';
 import {useTransactionGrid} from '../transactions/useTransactionGrid';
 import {useTransactionView} from '../transactions/useTransactionView';
+import {CheckboxIcon} from '../ui/CheckboxIcon';
 import {KeyboardShortcut} from '../ui/KeyboardShortcut';
 import {CommandList, Modal, Picker, useInitialFocus} from '../ui/Palette';
 import paletteStyles from '../ui/Palette.module.css';
@@ -590,7 +591,9 @@ function Workspace({
         const checked = filters[facet];
         const items = choices[facet].map(choice => ({
           ...choice,
-          mark: checked.includes(choice.id) ? ('checked' as const) : undefined,
+          mark: checked.includes(choice.id)
+            ? ('checked' as const)
+            : ('unchecked' as const),
         }));
 
         return {
@@ -771,12 +774,14 @@ function Workspace({
                   <KeyboardShortcut keys={['ctrl-shift-z']} />
                 </dd>
               </dl>
-              <label>
+              <label className={ui.checkbox}>
                 <input
+                  className={ui.visuallyHidden}
                   type="checkbox"
                   checked={letterKeys}
                   onChange={event => setLetterKeys(event.target.checked)}
-                />{' '}
+                />
+                <CheckboxIcon state={letterKeys ? 'checked' : 'unchecked'} />
                 Single-letter shortcuts
               </label>
             </div>

@@ -10,6 +10,7 @@ import {Combobox} from '@base-ui/react/combobox';
 import {Dialog} from '@base-ui/react/dialog';
 import {Command} from 'cmdk';
 
+import {CheckboxIcon, type CheckboxState} from './CheckboxIcon';
 import {searchCommands, type CommandItem} from './commandSearch';
 import {KeyboardShortcut} from './KeyboardShortcut';
 import styles from './Palette.module.css';
@@ -166,9 +167,10 @@ export function CommandList({items}: {items: readonly CommandItem[]}) {
                 aria-description={item.checked ? 'Filter active' : undefined}
               >
                 {item.checked !== undefined ? (
-                  <span className={styles.commandIcon} aria-hidden>
-                    {item.checked ? '✓' : '□'}
-                  </span>
+                  <CheckboxIcon
+                    className={styles.commandIcon}
+                    state={item.checked ? 'checked' : 'unchecked'}
+                  />
                 ) : (
                   item.icon && (
                     <item.icon
@@ -196,7 +198,7 @@ type PickItem = Searchable & {
   detail?: string;
   group?: boolean;
   groupLabel?: string;
-  mark?: 'checked' | 'mixed' | 'unchecked';
+  mark?: CheckboxState;
 };
 
 export function Picker({
@@ -251,11 +253,7 @@ export function Picker({
   function renderItem(item: PickItem) {
     return (
       <Combobox.Item key={item.id} value={item} className={ui.choice}>
-        {item.mark && (
-          <span aria-hidden className={styles.mark}>
-            {item.mark === 'mixed' ? '−' : item.mark === 'checked' ? '✓' : '□'}
-          </span>
-        )}
+        {item.mark && <CheckboxIcon state={item.mark} />}
         <span>
           {item.label}
           {item.group && (
