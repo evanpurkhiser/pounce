@@ -246,15 +246,21 @@ The picker retains staged values as its query changes.
 While editing text, those shortcuts operate on the text.
 Transaction history stays available across month changes in the same budget.
 
-A toast confirms successful writes, undo, and redo.
-Each successful action is one history entry, including a bulk edit.
-Keep the before and after values for the changed fields of each transaction.
-Undo writes back the before values and redo reapplies the after values.
-Refresh affected rows and budget summaries after a successful write.
-A new successful edit clears the redo history.
-If a write fails or the affected fields changed elsewhere,
-identify the transactions that need attention
-and retain the history needed to retry.
+Edits appear immediately and save in order.
+Undo removes the newest unsent edit from the queue.
+Redo puts that edit back in the queue.
+If the newest edit is already saving, undo queues its reversal.
+Undo and redo update the table immediately.
+Reversals wait for earlier saves and use only confirmed changes.
+
+A confirmed action is one history entry, including a bulk edit.
+Undo restores the previous field values and redo reapplies the saved values.
+A new edit clears redo history.
+
+If a save fails, discard the remaining queue
+and refresh the affected transactions.
+Confirmed changes stay in history,
+including the confirmed portion of a bulk edit.
 
 ## Open UX decisions
 

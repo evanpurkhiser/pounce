@@ -1,91 +1,81 @@
-import {useRef, useState} from 'react';
+import {useEffect, useMemo, useSyncExternalStore} from 'react';
 
 import {toast} from 'sonner';
 
-import type {Update} from './api';
-import {message, type Edit, type Session} from './session';
+import type {Row} from './api';
+import {message} from './editChanges';
+import {projectedHistory, projectRows, type EditIssue} from './editQueue';
+import type {Session} from './session';
 
-export function useEdits(session: Session) {
-  const [undo, setUndo] = useState<Edit[]>([]);
-  const [redo, setRedo] = useState<Edit[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [issues, setIssues] = useState<string[]>([]);
-  const active = useRef(false);
-
-  async function run(work: () => Promise<void>) {
-    if (active.current) {
-      return;
+function issueMessage(issue: EditIssue): string {
+  switch (issue.kind) {
+    case 'unavailable':
+      return `Transaction #${issue.id} is unavailable.`;
+    case 'missingConfirmation':
+      return `Missing write confirmation for #${issue.id}.`;
+    case 'conflict':
+      return `Transaction #${issue.id} changed in Lunch Money (${issue.fields.join(', ')}).`;
+    case 'differentValue':
+      return `#${issue.id} returned a different value from Lunch Money (${issue.fields.join(', ')}).`;
+    case 'requestFailed': {
+      const ids = issue.ids.map(id => `#${id}`).join(', ');
+      return issue.operation === 'read'
+        ? `Could not read ${ids} from Lunch Money. ${message(issue.error)}`
+        : `${ids} · ${message(issue.error)}`;
     }
-    active.current = true;
-    setBusy(true);
-    setIssues([]);
-    try {
-      await work();
-    } catch (error) {
-      setIssues([message(error)]);
-    } finally {
-      active.current = false;
-      setBusy(false);
-    }
+    case 'cacheUpdateFailed':
+      return `Could not update transaction #${issue.id} locally. ${message(issue.error)}`;
+    case 'unexpectedFailure':
+      return message(issue.error);
+    case 'discarded':
+      return `${issue.count} queued ${issue.count === 1 ? 'edit was' : 'edits were'} discarded.`;
+    case 'refreshFailed':
+      return `Could not refresh transactions. ${issue.issues.map(issueMessage).join(' ')}`;
   }
+}
 
-  function save(label: string, updates: Update[]) {
-    void run(async () => {
-      const result = await session.write(label, async () => updates);
-      const count = result.edit.changes.length;
-      setIssues(result.issues);
-      if (count) {
-        setUndo([...undo, result.edit]);
-        setRedo([]);
+export function useEdits({edits}: Session, rows: Row[]) {
+  const state = useSyncExternalStore(edits.subscribe, edits.getState);
+  const {phase, queued, issues} = state;
+  const history = useMemo(() => projectedHistory(state), [state]);
+  const visibleRows = useMemo(
+    () => projectRows(phase, queued, rows),
+    [phase, queued, rows],
+  );
+
+  useEffect(() => {
+    let previous = edits.getState().completion;
+    return edits.subscribe(() => {
+      const result = edits.getState().completion;
+      if (!result || result === previous) {
+        return;
+      }
+      previous = result;
+      const {kind, label, receipt} = result;
+      const count = receipt.written.length;
+      if (kind === 'save' && count) {
         toast.success(label, {
           description:
             count + (count === 1 ? ' transaction saved' : ' transactions saved'),
         });
-      } else if (!result.issues.length) {
-        toast.info('No changes to save.');
-      }
-    });
-  }
-
-  function replay(direction: 'undo' | 'redo') {
-    const source = direction === 'undo' ? undo : redo;
-    const moveBack = direction === 'undo' ? setUndo : setRedo;
-    const moveForward = direction === 'undo' ? setRedo : setUndo;
-    const original = source.at(-1);
-    if (!original) {
-      return;
-    }
-
-    void run(async () => {
-      const result = await session.replay(original, direction);
-      const completed = new Set(result.edit.changes.map(change => change.id));
-      const remaining = original.changes.filter(change => !completed.has(change.id));
-      const moved = original.changes.filter(change => completed.has(change.id));
-      if (result.issues.length) {
-        setIssues(result.issues);
-      }
-      if (moved.length) {
-        moveBack([
-          ...source.slice(0, -1),
-          ...(remaining.length ? [{...original, changes: remaining}] : []),
-        ]);
-        moveForward(stack => [...stack, {...original, changes: moved}]);
-        toast.success(direction === 'undo' ? 'Undo complete' : 'Redo complete', {
-          description: original.label,
+      } else if (kind !== 'save' && (count || receipt.alreadySatisfied.size)) {
+        toast.success(kind === 'undo' ? 'Undo complete' : 'Redo complete', {
+          description: label,
         });
-      } else if (!result.issues.length) {
+      } else if (!receipt.issues.length) {
         toast.info('No changes to save.');
       }
     });
-  }
+  }, [edits]);
 
   return {
-    busy,
-    issues,
-    clearIssues: () => setIssues([]),
-    canUndo: Boolean(undo.length),
-    canRedo: Boolean(redo.length),
-    save,
-    replay,
+    busy: phase.kind !== 'idle',
+    rows: visibleRows,
+    issues: issues.map(issueMessage),
+    clearIssues: edits.clearIssues,
+    canUndo: history.undo.length > 0,
+    canRedo: history.redo.length > 0,
+    save: edits.save,
+    replay: edits.replay,
   };
 }

@@ -1,4 +1,4 @@
-import {expect, test} from '@playwright/test';
+import {expect, test, type Page} from '@playwright/test';
 
 import {monthRange, currentMonth, type Patch} from '../src/data/api';
 import {demoSource} from '../src/data/demo';
@@ -53,7 +53,7 @@ test('loads a connected budget, handles API errors, and restores the connection 
     }
 
     const transactionId = Number(path.split('/')[2]);
-    if (path.startsWith('/transactions/') && transactionId >= 2 && transactionId <= 4) {
+    if (path.startsWith('/transactions/') && transactionId >= 1 && transactionId <= 4) {
       return json(sample.find(row => row.id === transactionId));
     }
 
@@ -294,4 +294,208 @@ test('loads a connected budget, handles API errors, and restores the connection 
   await page.reload();
   await expect(page.getByText('Sample data', {exact: true})).toBeVisible();
   await expect(page.getByRole('button', {name: 'Connect Lunch Money'})).toBeVisible();
+});
+
+async function openWithPausedWrites(page: Page, failAt?: number) {
+  const source = demoSource();
+  const requests: string[] = [];
+  const responses: Array<(value: void) => void> = [];
+  await page.addInitScript(() =>
+    localStorage.setItem('pounce.lunchMoneyToken', 'test-only-token'),
+  );
+  await page.route('https://api.lunchmoney.dev/v2/**', async route => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname.replace('/v2', '');
+    const json = (body: unknown, status = 200) =>
+      route.fulfill({status, json: body, headers: {'access-control-allow-origin': '*'}});
+    const range = monthRange(currentMonth());
+    const id = Number(path.split('/')[2]);
+    if (request.method() === 'PUT') {
+      const patch: Patch = request.postDataJSON();
+      const index = requests.push(patch.notes ?? '') - 1;
+      await new Promise<void>(resolve => responses.push(resolve));
+      if (index === failAt) {
+        return json({message: 'Fixture rejected the queued edit'}, 400);
+      }
+      const [row] = await source.update([{id, patch}]);
+      return json(row);
+    }
+
+    const metadata = {
+      '/me': {primary_currency: 'usd'},
+      '/categories': {categories: []},
+      '/tags': {tags: []},
+      '/manual_accounts': {manual_accounts: []},
+      '/plaid_accounts': {plaid_accounts: []},
+      '/budgets/settings': {budget_period_granularity: 'month'},
+    };
+    if (path === '/transactions') {
+      const {rows} = await source.transactionsPage(range, 0);
+      return json({transactions: rows, has_more: false});
+    }
+    if (id && path.startsWith('/transactions/')) {
+      return json(await source.get(id));
+    }
+    if (path === '/summary') {
+      return json(await source.summary(range));
+    }
+    if (path in metadata) {
+      return json(metadata[path as keyof typeof metadata]);
+    }
+    return route.abort();
+  });
+  await page.goto('/');
+  const first = page.locator('[data-row-id="1"]');
+  await expect(first).toBeVisible();
+  const note = first.locator('[data-editor-cell=note]');
+  return {
+    requests,
+    note,
+    async changeNote(value: string) {
+      await first.focus();
+      await page.keyboard.press('N');
+      await note.getByRole('textbox').fill(value);
+      await note.getByRole('textbox').blur();
+      await expect(note).toHaveText(value);
+    },
+    async finishWrite(index: number) {
+      await expect.poll(() => responses.length).toBeGreaterThan(index);
+      responses[index]();
+    },
+  };
+}
+
+test('undo and redo edit the queue before making another request', async ({page}) => {
+  const {requests, note, changeNote, finishWrite} = await openWithPausedWrites(page);
+  await changeNote('First note');
+  await expect.poll(() => requests).toEqual(['First note']);
+  await changeNote('Second note');
+  await changeNote('Third note');
+
+  await page.keyboard.press('Control+z');
+  await expect(note).toHaveText('Second note');
+  await page.keyboard.press('Control+z');
+  await expect(note).toHaveText('First note');
+  await page.keyboard.press('Control+Shift+z');
+  await expect(note).toHaveText('Second note');
+  expect(requests).toEqual(['First note']);
+
+  await finishWrite(0);
+  await expect.poll(() => requests).toEqual(['First note', 'Second note']);
+  await expect(note).toHaveText('Second note');
+  await finishWrite(1);
+
+  const undo = page.getByRole('button', {name: 'Undo', exact: true});
+  await undo.click();
+  await expect.poll(() => requests).toEqual(['First note', 'Second note', 'First note']);
+  await finishWrite(2);
+  await expect(note).toHaveText('First note');
+});
+
+test('a rejected save discards the queue and keeps confirmed edits undoable', async ({
+  page,
+}) => {
+  const {requests, note, changeNote, finishWrite} = await openWithPausedWrites(page, 1);
+  await changeNote('Confirmed note');
+  await changeNote('Rejected note');
+  await changeNote('Discarded note');
+  await finishWrite(0);
+  await expect.poll(() => requests).toEqual(['Confirmed note', 'Rejected note']);
+  await expect(note).toHaveText('Discarded note');
+
+  await finishWrite(1);
+  await expect(page.getByRole('alert')).toContainText('Fixture rejected the queued edit');
+  await expect(page.getByRole('alert')).toContainText('1 queued edit was discarded');
+  await expect(note).toHaveText('Confirmed note');
+
+  await page.getByRole('button', {name: 'Undo', exact: true}).click();
+  await expect.poll(() => requests).toEqual(['Confirmed note', 'Rejected note', '']);
+  await finishWrite(2);
+  await expect(note).toBeEmpty();
+  await expect(page.getByRole('button', {name: 'Undo', exact: true})).toHaveCount(0);
+});
+
+test('rapid undo and redo queue reverse writes in order', async ({page}) => {
+  const {requests, note, changeNote, finishWrite} = await openWithPausedWrites(page);
+  const values = ['First note', 'Second note', 'Third note'];
+  for (const [index, value] of values.entries()) {
+    await changeNote(value);
+    await finishWrite(index);
+    await expect(page.getByText('Saving…', {exact: true})).toBeHidden();
+  }
+
+  for (const value of ['Second note', 'First note', '']) {
+    await page.keyboard.press('Control+z');
+    await expect(note).toHaveText(value);
+  }
+  await expect.poll(() => requests).toEqual([...values, 'Second note']);
+  for (const index of [3, 4, 5]) {
+    await finishWrite(index);
+  }
+  await expect(page.getByText('Saving…', {exact: true})).toBeHidden();
+  expect(requests).toEqual([...values, 'Second note', 'First note', '']);
+
+  for (const value of values) {
+    await page.keyboard.press('Control+Shift+z');
+    await expect(note).toHaveText(value);
+  }
+  await expect
+    .poll(() => requests)
+    .toEqual([...values, 'Second note', 'First note', '', 'First note']);
+  for (const index of [6, 7, 8]) {
+    await finishWrite(index);
+  }
+  await expect(page.getByText('Saving…', {exact: true})).toBeHidden();
+  expect(requests).toEqual([...values, 'Second note', 'First note', '', ...values]);
+});
+
+test('undo queues behind a save already in flight after canceling newer drafts', async ({
+  page,
+}) => {
+  const {requests, note, changeNote, finishWrite} = await openWithPausedWrites(page);
+  await changeNote('In flight');
+  await expect.poll(() => requests).toEqual(['In flight']);
+  await changeNote('First draft');
+  await changeNote('Second draft');
+
+  for (const value of ['First draft', 'In flight', '']) {
+    await page.keyboard.press('Control+z');
+    await expect(note).toHaveText(value);
+  }
+  expect(requests).toEqual(['In flight']);
+
+  await finishWrite(0);
+  await expect.poll(() => requests).toEqual(['In flight', '']);
+  await page.keyboard.press('Control+Shift+z');
+  await expect(note).toHaveText('In flight');
+  expect(requests).toEqual(['In flight', '']);
+
+  await finishWrite(1);
+  await expect.poll(() => requests).toEqual(['In flight', '', 'In flight']);
+  await finishWrite(2);
+  await expect(page.getByText('Saving…', {exact: true})).toBeHidden();
+  await expect(note).toHaveText('In flight');
+
+  await page.keyboard.press('Control+Shift+z');
+  await expect(note).toHaveText('First draft');
+  await finishWrite(3);
+  await expect(page.getByText('Saving…', {exact: true})).toBeHidden();
+  expect(requests).toEqual(['In flight', '', 'In flight', 'First draft']);
+});
+
+test('undo of an in-flight save is discarded if the original write fails', async ({
+  page,
+}) => {
+  const {requests, note, changeNote, finishWrite} = await openWithPausedWrites(page, 0);
+  await changeNote('In flight');
+  await expect.poll(() => requests).toEqual(['In flight']);
+  await page.keyboard.press('Control+z');
+  await expect(note).toBeEmpty();
+
+  await finishWrite(0);
+  await expect(page.getByRole('alert')).toContainText('1 queued edit was discarded');
+  await expect(page.getByText('Saving…', {exact: true})).toBeHidden();
+  await expect(note).toBeEmpty();
+  await expect(page.getByRole('button', {name: 'Redo', exact: true})).toHaveCount(0);
+  expect(requests).toEqual(['In flight']);
 });
