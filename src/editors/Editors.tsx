@@ -29,6 +29,7 @@ import {TransactionTag} from '../transactions/TransactionTag';
 import {KeyboardShortcut} from '../ui/KeyboardShortcut';
 import {Picker, useInitialFocus} from '../ui/Palette';
 import {rank} from '../ui/search';
+import {shortcuts} from '../ui/shortcuts';
 import ui from '../ui/ui.module.css';
 
 import styles from './Editors.module.css';
@@ -435,7 +436,7 @@ export function TagPicker({
             </button>
           )}
           <small>
-            <KeyboardShortcut keys={['alt-Enter']} /> resets a tag
+            <KeyboardShortcut binding={shortcuts.resetTag} /> resets a tag
           </small>
         </>
       }

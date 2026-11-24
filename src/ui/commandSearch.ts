@@ -1,5 +1,6 @@
 import type {ReactNode} from 'react';
 
+import type {Hotkey} from '@tanstack/react-hotkeys';
 import type {LucideIcon} from 'lucide-react';
 
 import {rank, type Searchable} from './search';
@@ -9,7 +10,7 @@ export type CommandItem = Searchable & {
   labelContent?: ReactNode;
   group: string;
   groupLabel?: string;
-  shortcut?: readonly string[];
+  shortcut?: Hotkey;
   detail?: string;
   icon?: LucideIcon;
   checked?: boolean;

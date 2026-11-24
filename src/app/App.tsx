@@ -7,7 +7,6 @@ import {QueryClientProvider, useQuery} from '@tanstack/react-query';
 import {
   ChevronLeft,
   ChevronRight,
-  Command,
   Filter as FilterIcon,
   Search,
   Wallet,
@@ -61,6 +60,7 @@ import {useTransactionView} from '../transactions/useTransactionView';
 import {KeyboardShortcut} from '../ui/KeyboardShortcut';
 import {CommandList, Modal, Picker, useInitialFocus} from '../ui/Palette';
 import paletteStyles from '../ui/Palette.module.css';
+import {shortcuts} from '../ui/shortcuts';
 import ui from '../ui/ui.module.css';
 
 import styles from './App.module.css';
@@ -349,34 +349,38 @@ function Workspace({
   const readyForEdit = !load.isPending;
   useHotkeys([
     {
-      hotkey: 'Mod+K',
+      hotkey: shortcuts.commands,
       callback: () => open({kind: 'commands'}),
       options: {enabled: !suspended},
     },
     {
-      hotkey: 'Mod+Z',
+      hotkey: shortcuts.undo,
       callback: () => edits.replay('undo'),
       options: {enabled: edits.canUndo && !suspended},
     },
     {
-      hotkey: 'Mod+Shift+Z',
+      hotkey: shortcuts.redo,
       callback: () => edits.replay('redo'),
       options: {enabled: edits.canRedo && !suspended},
     },
     {
-      hotkey: 'S',
+      hotkey: shortcuts.sort,
       callback: () => open({kind: 'sort'}),
       options: {enabled: !suspended},
     },
     {
-      hotkey: 'F',
+      hotkey: shortcuts.filter,
       callback: () => open({kind: 'filters'}),
       options: {enabled: !suspended},
     },
-    {hotkey: ']', callback: toggleBudget, options: {enabled: !suspended}},
-    {hotkey: 'Control+F', callback: clearFilters, options: {enabled: !suspended}},
+    {hotkey: shortcuts.budget, callback: toggleBudget, options: {enabled: !suspended}},
     {
-      hotkey: 'Escape',
+      hotkey: shortcuts.clearFilters,
+      callback: clearFilters,
+      options: {enabled: !suspended},
+    },
+    {
+      hotkey: shortcuts.dismiss,
       callback: event => {
         if (grid.escape()) {
           event.preventDefault();
@@ -385,37 +389,37 @@ function Workspace({
       options: {enabled: !suspended, preventDefault: false, stopPropagation: false},
     },
     {
-      hotkey: 'Shift+/',
+      hotkey: shortcuts.help,
       callback: () => open({kind: 'shortcuts'}),
       options: {enabled: !suspended},
     },
     {
-      hotkey: 'Shift+]',
+      hotkey: shortcuts.nextMonth,
       callback: () => go(shiftMonth(month, 1)),
       options: {enabled: !suspended},
     },
     {
-      hotkey: 'Shift+[',
+      hotkey: shortcuts.previousMonth,
       callback: () => go(shiftMonth(month, -1)),
       options: {enabled: !suspended},
     },
     {
-      hotkey: ['G', 'T'],
+      hotkey: shortcuts.currentMonth,
       callback: () => go(currentMonth()),
       options: {enabled: !suspended},
     },
     {
-      hotkey: ['G', 'M'],
+      hotkey: shortcuts.pickMonth,
       callback: () => open({kind: 'month'}),
       options: {enabled: !suspended},
     },
     {
-      hotkey: ['G', 'G'],
+      hotkey: shortcuts.firstRow,
       callback: () => grid.jumpToEdge('first'),
       options: {enabled: canNavigateRows},
     },
     {
-      hotkey: 'Shift+G',
+      hotkey: shortcuts.lastRow,
       callback: () => grid.jumpToEdge('last'),
       options: {enabled: canNavigateRows},
     },
@@ -426,25 +430,45 @@ function Workspace({
     },
     {hotkey: 'ArrowUp', callback: () => grid.move(-1), options: {enabled: enterGridKeys}},
     {
-      hotkey: 'Control+D',
+      hotkey: shortcuts.halfPageDown,
       callback: () => grid.move(1, false, 0.5),
       options: {enabled: canNavigateRows, ignoreInputs: true},
     },
     {
-      hotkey: 'Control+U',
+      hotkey: shortcuts.halfPageUp,
       callback: () => grid.move(-1, false, 0.5),
       options: {enabled: canNavigateRows, ignoreInputs: true},
     },
-    {hotkey: 'J', callback: () => grid.move(1), options: {enabled: canNavigateRows}},
-    {hotkey: 'K', callback: () => grid.move(-1), options: {enabled: canNavigateRows}},
-    {hotkey: 'Shift+J', callback: () => grid.move(1, true), options: {enabled: gridKeys}},
     {
-      hotkey: 'Shift+K',
+      hotkey: shortcuts.nextRow,
+      callback: () => grid.move(1),
+      options: {enabled: canNavigateRows},
+    },
+    {
+      hotkey: shortcuts.previousRow,
+      callback: () => grid.move(-1),
+      options: {enabled: canNavigateRows},
+    },
+    {
+      hotkey: shortcuts.extendSelectionDown,
+      callback: () => grid.move(1, true),
+      options: {enabled: gridKeys},
+    },
+    {
+      hotkey: shortcuts.extendSelectionUp,
       callback: () => grid.move(-1, true),
       options: {enabled: gridKeys},
     },
-    {hotkey: 'X', callback: grid.toggleFocused, options: {enabled: gridKeys}},
-    {hotkey: 'Shift+X', callback: grid.extendToFocused, options: {enabled: gridKeys}},
+    {
+      hotkey: shortcuts.toggleSelection,
+      callback: grid.toggleFocused,
+      options: {enabled: gridKeys},
+    },
+    {
+      hotkey: shortcuts.selectRange,
+      callback: grid.extendToFocused,
+      options: {enabled: gridKeys},
+    },
     {
       hotkey: reviewShortcut,
       callback: () => {
@@ -605,8 +629,8 @@ function Workspace({
               footer={
                 <>
                   <small>
-                    <KeyboardShortcut keys={['cmd-Enter']} /> /{' '}
-                    <KeyboardShortcut keys={['ctrl-Enter']} /> toggles values
+                    <KeyboardShortcut binding={shortcuts.toggleFilterValue} /> toggles
+                    values
                   </small>
                   <button type="button" onClick={close}>
                     Done
@@ -701,15 +725,14 @@ function Workspace({
           {live ? 'Connection' : 'Connect Lunch Money'}
         </button>
         <button type="button" onClick={() => open({kind: 'shortcuts'})}>
-          Shortcuts <KeyboardShortcut keys={['?']} />
+          Shortcuts <KeyboardShortcut binding={shortcuts.help} />
         </button>
         <button
           type="button"
           ref={commandButton}
           onClick={() => open({kind: 'commands'})}
         >
-          <Command className={ui.actionIcon} aria-hidden />
-          Commands <KeyboardShortcut keys={['cmd-k']} />
+          Commands <KeyboardShortcut binding={shortcuts.commands} />
         </button>
       </header>
       <main className={styles.layout}>
@@ -720,7 +743,7 @@ function Workspace({
               type="button"
               onClick={() => go(shiftMonth(month, -1))}
               aria-label="Previous month"
-              aria-keyshortcuts={!suspended ? 'Shift+[' : undefined}
+              aria-keyshortcuts={!suspended ? shortcuts.previousMonth : undefined}
             >
               <ChevronLeft className={ui.actionIcon} aria-hidden />
             </button>
@@ -731,7 +754,7 @@ function Workspace({
               type="button"
               onClick={() => go(shiftMonth(month, 1))}
               aria-label="Next month"
-              aria-keyshortcuts={!suspended ? 'Shift+]' : undefined}
+              aria-keyshortcuts={!suspended ? shortcuts.nextMonth : undefined}
             >
               <ChevronRight className={ui.actionIcon} aria-hidden />
             </button>
@@ -748,7 +771,7 @@ function Workspace({
               type="button"
               aria-expanded={budgetOpen}
               aria-controls="monthly-budget"
-              aria-keyshortcuts="]"
+              aria-keyshortcuts={shortcuts.budget}
               onClick={toggleBudget}
             >
               <Wallet className={ui.actionIcon} aria-hidden />

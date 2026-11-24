@@ -15,6 +15,7 @@ import {searchCommands, type CommandItem} from './commandSearch';
 import {KeyboardShortcut} from './KeyboardShortcut';
 import styles from './Palette.module.css';
 import {rank, type Searchable} from './search';
+import {shortcuts} from './shortcuts';
 import ui from './ui.module.css';
 
 export function Modal({
@@ -54,8 +55,8 @@ export function Modal({
               </button>
             )}
             <Dialog.Title>{title}</Dialog.Title>
-            <Dialog.Close aria-label="Close" aria-keyshortcuts="Escape">
-              <KeyboardShortcut keys={['Esc']} />
+            <Dialog.Close aria-label="Close" aria-keyshortcuts={shortcuts.dismiss}>
+              <KeyboardShortcut binding={shortcuts.dismiss} />
             </Dialog.Close>
           </header>
           {children}
@@ -193,7 +194,7 @@ export function CommandList({items}: {items: readonly CommandItem[]}) {
                 {item.detail && (
                   <small className={styles.commandDetail}>{item.detail}</small>
                 )}
-                {item.shortcut && <KeyboardShortcut keys={item.shortcut} />}
+                {item.shortcut && <KeyboardShortcut binding={item.shortcut} />}
               </Command.Item>
             ))}
           </Command.Group>

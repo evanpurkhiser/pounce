@@ -1,62 +1,30 @@
-import {
-  ArrowBigUp,
-  ArrowDown,
-  ArrowLeft,
-  ArrowRight,
-  ArrowUp,
-  ChevronUp,
-  Command,
-  Option,
-} from 'lucide-react';
+import {useFormatForDisplay, type Hotkey} from '@tanstack/react-hotkeys';
 
 import styles from './KeyboardShortcut.module.css';
 import ui from './ui.module.css';
 
-const keyIcons = new Map([
-  ['shift', {label: 'Shift', icon: ArrowBigUp}],
-  ['cmd', {label: 'Command', icon: Command}],
-  ['ctrl', {label: 'Control', icon: ChevronUp}],
-  ['alt', {label: 'Alt', icon: Option}],
-  ['←', {label: 'Left Arrow', icon: ArrowLeft}],
-  ['→', {label: 'Right Arrow', icon: ArrowRight}],
-  ['↑', {label: 'Up Arrow', icon: ArrowUp}],
-  ['↓', {label: 'Down Arrow', icon: ArrowDown}],
-]);
+const spokenLabels: Record<string, string> = {
+  Cmd: 'Command',
+  Ctrl: 'Control',
+  ArrowLeft: 'Left Arrow',
+  ArrowRight: 'Right Arrow',
+  ArrowUp: 'Up Arrow',
+  ArrowDown: 'Down Arrow',
+};
 
-export function KeyboardShortcut({keys}: {keys: readonly string[]}) {
-  if (keys.length === 0) {
-    return null;
-  }
-
-  const presses = keys.map(press =>
-    press.split(/-(?=.)/).map(
-      key =>
-        keyIcons.get(key.toLowerCase()) ?? {
-          label: key.length === 1 ? key.toUpperCase() : key,
-          icon: null,
-        },
-    ),
-  );
+export function KeyboardShortcut({binding}: {binding: Hotkey}) {
+  const format = useFormatForDisplay();
+  const steps = typeof binding === 'string' ? [binding] : binding;
+  const spoken = format(steps, {parts: true, useSymbols: false})
+    .map(chord => chord.map(key => spokenLabels[key] ?? key).join('+'))
+    .join(', then ');
 
   return (
     <kbd className={styles.shortcut}>
-      <span className={ui.visuallyHidden}>
-        {presses.map(press => press.map(key => key.label).join('+')).join(', then ')}
+      <span className={ui.visuallyHidden}>{spoken}</span>
+      <span aria-hidden>
+        {format(binding, {keyLabels: {Enter: 'Enter', Tab: 'Tab'}})}
       </span>
-      {presses.map((press, index) => (
-        // oxlint-disable-next-line react/no-array-index-key -- A shortcut can repeat a press, and only its position distinguishes it.
-        <span key={index} className={styles.press} aria-hidden>
-          {press.map(({label, icon: Icon}) =>
-            Icon ? (
-              <Icon key={label} />
-            ) : (
-              <span key={label} className={styles.key}>
-                {label}
-              </span>
-            ),
-          )}
-        </span>
-      ))}
     </kbd>
   );
 }

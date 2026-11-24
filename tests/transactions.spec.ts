@@ -413,7 +413,11 @@ test('bulk tag picker keeps mixed memberships until Apply and preserves other ta
   await page.keyboard.press('J');
   await page.keyboard.press('X');
   await page.keyboard.press('T');
-  await expect(dialog(page).locator('kbd svg.lucide-option')).toBeVisible();
+  await expect(
+    dialog(page)
+      .locator('kbd')
+      .filter({hasText: /(?:Alt|Option)\+Enter/}),
+  ).toBeVisible();
   const travel = dialog(page).getByRole('option', {name: /Travel/});
   await expect(travel).toHaveText(/Travel.*1 of 2/);
   await expect(travel.locator('svg.lucide-square-minus')).toBeVisible();
@@ -584,6 +588,65 @@ test('bulk date change moves across months and can be undone from another month'
   await expect(row(page, 1)).toBeVisible();
 });
 
+for (const {platform, userAgent, modifier, command, redo, clear, toggle, reset} of [
+  {
+    platform: 'MacIntel',
+    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
+    modifier: 'Meta',
+    command: '⌘ K',
+    redo: '⇧ ⌘ Z',
+    clear: '⌃ F',
+    toggle: '⌘ Enter',
+    reset: '⌥ Enter',
+  },
+  {
+    platform: 'Win32',
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+    modifier: 'Control',
+    command: 'Ctrl+K',
+    redo: 'Ctrl+Shift+Z',
+    clear: 'Ctrl+F',
+    toggle: 'Ctrl+Enter',
+    reset: 'Alt+Enter',
+  },
+]) {
+  test.describe(platform, () => {
+    test.use({userAgent});
+
+    test('shortcut hints and command activation use the platform modifier', async ({
+      page,
+    }) => {
+      await page.addInitScript(value => {
+        Object.defineProperty(navigator, 'platform', {get: () => value});
+      }, platform);
+      await ready(page);
+
+      const commands = page.getByRole('button', {name: /^Commands/});
+      await expect(commands.locator('kbd [aria-hidden="true"]')).toHaveText(command);
+      await page.keyboard.press(`${modifier}+k`);
+      await expect(dialog(page)).toHaveAccessibleName('Commands');
+      await page.keyboard.press('Escape');
+
+      await page.keyboard.press('Shift+/');
+      const help = dialog(page);
+      await expect(help).toHaveAccessibleName('Keyboard shortcuts');
+      for (const [action, label] of [
+        ['Open command palette', command],
+        ['Redo', redo],
+        ['Clear filters', clear],
+        ['Toggle highlighted filter value', toggle],
+        ['Reset highlighted tag change', reset],
+      ]) {
+        const displayed = help
+          .getByText(action, {exact: true})
+          .locator('..')
+          .locator('kbd [aria-hidden="true"]');
+        await expect(displayed).toHaveText(label);
+      }
+    });
+  });
+}
+
 test('shortcut overlay restores focus and filter modifier adds a second category', async ({
   page,
 }) => {
@@ -594,25 +657,13 @@ test('shortcut overlay restores focus and filter modifier adds a second category
   await expect(
     dialog(page).getByRole('button', {name: 'Close'}).locator('kbd'),
   ).toBeVisible();
-  await expect(dialog(page).locator('kbd svg.lucide-option')).toBeVisible();
-  await expect(dialog(page).locator('kbd svg.lucide-arrow-left')).toBeVisible();
-  await expect(dialog(page).locator('kbd svg.lucide-arrow-right')).toBeVisible();
-  await expect(
-    dialog(page)
-      .locator('kbd')
-      .filter({hasText: 'Shift+Up Arrow'})
-      .locator('svg.lucide-arrow-up'),
-  ).toBeVisible();
-  await expect(
-    dialog(page)
-      .locator('kbd')
-      .filter({hasText: 'Shift+Down Arrow'})
-      .locator('svg.lucide-arrow-down'),
-  ).toBeVisible();
-  await expect(dialog(page).locator('kbd').filter({hasText: 'G, then G'})).toBeVisible();
-  const redoShortcut = dialog(page).locator('kbd').filter({hasText: 'Command+Shift+Z'});
-  await expect(redoShortcut.locator('svg.lucide-command')).toBeVisible();
-  await expect(redoShortcut.locator('svg.lucide-arrow-big-up')).toBeVisible();
+  const displayed = dialog(page).locator('kbd [aria-hidden="true"]');
+  for (const label of ['←', '→', 'G G']) {
+    await expect(displayed.filter({hasText: new RegExp(`^${label}$`)})).toBeVisible();
+  }
+  for (const label of ['Shift+Up Arrow', 'Shift+Down Arrow', 'G, then G']) {
+    await expect(dialog(page).locator('kbd').filter({hasText: label})).toBeVisible();
+  }
   await page.keyboard.press('Escape');
   await expect(row(page, 1)).toBeFocused();
 
@@ -1122,7 +1173,9 @@ test('F opens filters, Ctrl+F clears facets and search, and G T returns to this 
   await page.keyboard.press('Control+k');
   const clearFilters = dialog(page).getByRole('option', {name: /Clear filters/});
   await expect(clearFilters).toHaveAccessibleName('Clear filters Control+F');
-  await expect(clearFilters.locator('kbd svg.lucide-chevron-up')).toBeVisible();
+  await expect(clearFilters.locator('kbd [aria-hidden="true"]')).toHaveText(
+    /^(Ctrl\+|⌃ )F$/,
+  );
   await clearFilters.click();
   await expect(page.getByRole('button', {name: 'Clear search'})).toHaveCount(0);
 
@@ -1432,9 +1485,8 @@ test('bulk commands align counts and R reviews the selection with confirmation',
   await expect(
     dialog(page)
       .getByRole('option', {name: /Mark 2 reviewed/})
-      .locator('kbd [aria-hidden="true"]')
-      .getByText('R', {exact: true}),
-  ).toBeVisible();
+      .locator('kbd [aria-hidden="true"]'),
+  ).toHaveText('R');
   await page.keyboard.press('Escape');
   await page.keyboard.press('R');
   await expect(

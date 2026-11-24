@@ -14,6 +14,7 @@ import {
 
 import type {Choice, Row} from '../data/api';
 import type {CommandItem} from '../ui/commandSearch';
+import {shortcuts} from '../ui/shortcuts';
 
 import {columns, type SortDescriptor} from './sorting';
 import {
@@ -51,16 +52,29 @@ export const reviews = [
 ] as const;
 
 const tableActions = {
-  filter: {label: 'Filter', icon: Filter, shortcut: ['f']},
-  clear: {label: 'Clear filters', icon: X, shortcut: ['ctrl-f']},
-  sort: {label: 'Sort by', icon: ArrowDownUp, shortcut: ['s'], aliases: ['sort']},
+  filter: {label: 'Filter', icon: Filter, shortcut: shortcuts.filter},
+  clear: {label: 'Clear filters', icon: X, shortcut: shortcuts.clearFilters},
+  sort: {
+    label: 'Sort by',
+    icon: ArrowDownUp,
+    shortcut: shortcuts.sort,
+    aliases: ['sort'],
+  },
   search: {label: 'Search', icon: Search},
-  previous: {label: 'Previous month', icon: ChevronLeft, shortcut: ['{']},
-  next: {label: 'Next month', icon: ChevronRight, shortcut: ['}']},
-  month: {label: 'Go to month…', icon: CalendarDays, shortcut: ['g', 'm']},
-  current: {label: 'Go to current month', icon: CalendarDays, shortcut: ['g', 't']},
-  undo: {label: 'Undo last edit', icon: Undo2, shortcut: ['cmd-z']},
-  redo: {label: 'Redo last edit', icon: Redo2, shortcut: ['cmd-shift-z']},
+  previous: {
+    label: 'Previous month',
+    icon: ChevronLeft,
+    shortcut: shortcuts.previousMonth,
+  },
+  next: {label: 'Next month', icon: ChevronRight, shortcut: shortcuts.nextMonth},
+  month: {label: 'Go to month…', icon: CalendarDays, shortcut: shortcuts.pickMonth},
+  current: {
+    label: 'Go to current month',
+    icon: CalendarDays,
+    shortcut: shortcuts.currentMonth,
+  },
+  undo: {label: 'Undo last edit', icon: Undo2, shortcut: shortcuts.undo},
+  redo: {label: 'Redo last edit', icon: Redo2, shortcut: shortcuts.redo},
 } satisfies Record<string, Pick<CommandItem, 'label' | 'icon' | 'shortcut' | 'aliases'>>;
 
 export function tableCommand(
@@ -175,7 +189,7 @@ export function transactionCommands(
       icon,
       detail: multiple ? transactionCountLabel(rows.length) : undefined,
       group: 'Transactions',
-      shortcut: [key],
+      shortcut: key,
       invoke: () => edit(field),
     }),
   );
@@ -187,7 +201,7 @@ export function transactionCommands(
         group: 'Transactions',
         label: 'Mark ' + (multiple ? count + ' ' : '') + status,
         icon: reviewIcons[status],
-        shortcut: status === reviewStatusFor(rows) ? [reviewShortcut] : undefined,
+        shortcut: status === reviewStatusFor(rows) ? reviewShortcut : undefined,
         invoke: () => review(status),
       });
     }
