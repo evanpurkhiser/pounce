@@ -43,6 +43,38 @@ function patchKeys(patch: Patch) {
   return Object.keys(patch) as EditableKey[];
 }
 
+function tagChanges(before: number[], after: number[]) {
+  return {
+    added: after.filter(id => !before.includes(id)),
+    removed: before.filter(id => !after.includes(id)),
+  };
+}
+
+function applyTagChanges(current: number[], added: number[], removed: number[]) {
+  return [...new Set([...current.filter(id => !removed.includes(id)), ...added])];
+}
+
+export type QueuedUpdate = Update & {tags?: ReturnType<typeof tagChanges>};
+
+export function queueUpdate(row: Row, patch: Patch): QueuedUpdate | undefined {
+  if (patchKeys(patch).every(key => equal(key, row[key], patch[key]))) {
+    return;
+  }
+
+  return {
+    id: row.id,
+    patch,
+    tags: patch.tag_ids && tagChanges(row.tag_ids, patch.tag_ids),
+  };
+}
+
+export function resolveUpdate(update: QueuedUpdate, row: Row): Patch {
+  const {patch, tags} = update;
+  return tags
+    ? {...patch, tag_ids: applyTagChanges(row.tag_ids, tags.added, tags.removed)}
+    : patch;
+}
+
 export function createSession(source: DataSource) {
   const query = new QueryClient({
     defaultOptions: {
@@ -151,17 +183,6 @@ export function createSession(source: DataSource) {
     return ids.map(id => result.get(id)!);
   }
 
-  function tagChanges(before: number[], after: number[]) {
-    return {
-      added: after.filter(id => !before.includes(id)),
-      removed: before.filter(id => !after.includes(id)),
-    };
-  }
-
-  function applyTagChanges(current: number[], added: number[], removed: number[]) {
-    return [...new Set([...current.filter(id => !removed.includes(id)), ...added])];
-  }
-
   async function mutate(label: string, changes: Update[]): Promise<WriteResult> {
     const issues: string[] = [];
     const committed: Change[] = [];
@@ -237,6 +258,9 @@ export function createSession(source: DataSource) {
               `${batch.map(change => '#' + change.id).join(', ')} · ${message(error)}`,
             );
           }
+          if (issues.length) {
+            break;
+          }
         }
 
         if (!committed.length && issues.length) {
@@ -255,29 +279,41 @@ export function createSession(source: DataSource) {
     return {edit: {label, changes: committed}, issues};
   }
 
-  function write(label: string, getUpdates: () => Promise<Update[]>) {
+  function withWrite<T>(work: () => Promise<T>) {
     if (pending) {
       return Promise.reject(new Error('An edit is still saving.'));
     }
     writeVersion++;
-    const operation = (async () => {
+    const operation = work().finally(() => {
+      writeVersion++;
+      pending = undefined;
+      void query.invalidateQueries({queryKey: ['budget']});
+      void query.invalidateQueries({queryKey: ['transactions'], refetchType: 'none'});
+    });
+    pending = operation;
+    return operation;
+  }
+
+  function write(
+    label: string,
+    getUpdates: () => QueuedUpdate[] | Promise<QueuedUpdate[]>,
+  ) {
+    return withWrite(async () => {
       const requested = await getUpdates();
       const requestedTags = requested.filter(({patch}) => patch.tag_ids !== undefined);
       const freshTags = await getCurrent(requestedTags.map(({id}) => id));
       const currentTags = new Map(freshTags.map(row => [row.id, row]));
       const updates = requested
-        .map(({id, patch}) => {
+        .map(update => {
+          const {id, patch} = update;
           const current = currentTags.get(id);
           const previous = rows.get(id);
           if (!current || !previous || patch.tag_ids === undefined) {
             return {id, patch};
           }
-          const {added, removed} = tagChanges(previous.tag_ids, patch.tag_ids);
+          const tags = update.tags ?? tagChanges(previous.tag_ids, patch.tag_ids);
           mergeRow(current);
-          return {
-            id,
-            patch: {...patch, tag_ids: applyTagChanges(current.tag_ids, added, removed)},
-          };
+          return {id, patch: resolveUpdate({...update, tags}, current)};
         })
         .filter(({id, patch}) => {
           const row = rows.get(id);
@@ -286,17 +322,15 @@ export function createSession(source: DataSource) {
       return updates.length
         ? await mutate(label, updates)
         : {edit: {label, changes: []}, issues: []};
-    })();
-    pending = operation;
-    void operation
-      .finally(() => {
-        writeVersion++;
-        pending = undefined;
-        void query.invalidateQueries({queryKey: ['budget']});
-        void query.invalidateQueries({queryKey: ['transactions'], refetchType: 'none'});
-      })
-      .catch(() => {});
-    return operation;
+    });
+  }
+
+  function refreshRows(ids: number[]) {
+    return withWrite(async () => {
+      for (const row of await getCurrent(ids)) {
+        mergeRow(row);
+      }
+    });
   }
 
   function replay(edit: Edit, direction: 'undo' | 'redo') {
@@ -333,7 +367,7 @@ export function createSession(source: DataSource) {
     });
   }
 
-  return {source, query, rows, loadPage, applyPages, write, replay};
+  return {source, query, rows, loadPage, applyPages, write, replay, refreshRows};
 }
 
 export type Session = ReturnType<typeof createSession>;

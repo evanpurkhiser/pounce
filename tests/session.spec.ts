@@ -2,7 +2,7 @@ import {expect, test} from '@playwright/test';
 
 import {currentMonth, monthRange} from '../src/data/api';
 import {demoSource} from '../src/data/demo';
-import {createSession} from '../src/data/session';
+import {createSession, queueUpdate} from '../src/data/session';
 
 async function loadSession() {
   const source = demoSource();
@@ -33,7 +33,7 @@ test('rejects an older snapshot when it overlaps a newer applied range', async (
 test('an undo conflict reconciles the row with Lunch Money', async () => {
   const {source, session, page} = await loadSession();
   const id = page.rows[0].id;
-  const {edit} = await session.write('Changed note', async () => [
+  const {edit} = await session.write('Changed note', () => [
     {id, patch: {notes: 'Local write'}},
   ]);
   await source.update([{id, patch: {notes: 'External change'}}]);
@@ -42,4 +42,16 @@ test('an undo conflict reconciles the row with Lunch Money', async () => {
     `Transaction #${id} changed in Lunch Money (notes).`,
   );
   expect(session.rows.get(id)?.notes).toBe('External change');
+});
+
+test('a queued tag change preserves a tag added remotely while waiting', async () => {
+  const {source, session, page} = await loadSession();
+  const row = page.rows[0];
+  const update = queueUpdate(row, {tag_ids: [1, 2]})!;
+  await source.update([{id: row.id, patch: {tag_ids: [1, 3]}}]);
+
+  const {edit} = await session.write('Set tags', () => [update]);
+  expect(session.rows.get(row.id)?.tag_ids).toEqual([1, 3, 2]);
+  await session.replay(edit, 'undo');
+  expect(session.rows.get(row.id)?.tag_ids).toEqual([1, 3]);
 });

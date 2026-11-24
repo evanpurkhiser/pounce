@@ -26,7 +26,7 @@ import {
   type Row,
 } from '../data/api';
 import {demoSource} from '../data/demo';
-import {createSession, message, type Session} from '../data/session';
+import {createSession, message, queueUpdate, type Session} from '../data/session';
 import {useEdits} from '../data/useEdits';
 import {useTransactionPages} from '../data/useTransactionPages';
 import {RangeEditor} from '../editors/Editors';
@@ -154,7 +154,6 @@ function Workspace({
   const budgetButton = useRef<HTMLButtonElement>(null);
   const commandButton = useRef<HTMLButtonElement>(null);
   const pendingFocus = useRef<() => HTMLElement | null>(undefined);
-  const edits = useEdits(session);
   const range = customRange ?? monthRange(month);
   const {
     data: metadata,
@@ -167,7 +166,11 @@ function Workspace({
   });
   const load = useTransactionPages(session, range);
   const {data: allRows = []} = useLiveQuery(session.rows);
-  const postedRows = useMemo(() => allRows.filter(row => !row.is_pending), [allRows]);
+  const edits = useEdits(session, allRows);
+  const postedRows = useMemo(
+    () => edits.rows.filter(row => !row.is_pending),
+    [edits.rows],
+  );
   const choices = useMemo<Record<Facet, readonly Choice[]>>(
     () => ({
       review: reviews,
@@ -281,15 +284,15 @@ function Workspace({
     }
     edits.save(
       label,
-      rows.map(row => ({
-        id: row.id,
-        patch: typeof patch === 'function' ? patch(row) : patch,
-      })),
+      rows.flatMap(row => {
+        const update = queueUpdate(row, typeof patch === 'function' ? patch(row) : patch);
+        return update ? [update] : [];
+      }),
     );
   }
 
   function showEditor(field: Field, rows: Row[]) {
-    if (!rows.length || edits.busy) {
+    if (!rows.length || !edits.canEdit) {
       return;
     }
 
@@ -340,7 +343,7 @@ function Workspace({
   const canNavigateRows = !suspended && visible.length > 0;
   const rowNavigationKeys = canNavigateRows && letterKeys;
   const enterGridKeys = canNavigateRows && !grid.hasFocus;
-  const readyForEdit = !edits.busy && !load.isPending;
+  const readyForEdit = edits.canEdit && !load.isPending;
   function keyboardTargets() {
     const row = grid.focusedTransaction();
     if (row) {
@@ -357,12 +360,12 @@ function Workspace({
     {
       hotkey: 'Mod+Z',
       callback: () => edits.replay('undo'),
-      options: {enabled: readyForEdit && edits.canUndo && !suspended},
+      options: {enabled: edits.canUndo && !suspended},
     },
     {
       hotkey: 'Mod+Shift+Z',
       callback: () => edits.replay('redo'),
-      options: {enabled: readyForEdit && edits.canRedo && !suspended},
+      options: {enabled: edits.canRedo && !suspended},
     },
     {
       hotkey: 'S',
@@ -477,7 +480,7 @@ function Workspace({
     tableCommand('next', () => go(shiftMonth(month, 1))),
     tableCommand('month', () => open({kind: 'month'})),
     tableCommand('current', () => go(currentMonth())),
-    ...(!edits.busy && edits.canUndo
+    ...(edits.canUndo
       ? [
           tableCommand('undo', () => {
             close();
@@ -485,7 +488,7 @@ function Workspace({
           }),
         ]
       : []),
-    ...(!edits.busy && edits.canRedo
+    ...(edits.canRedo
       ? [
           tableCommand('redo', () => {
             close();
@@ -550,7 +553,7 @@ function Workspace({
     }
     const {id, field} = inlineEditor;
     setSurface(current => (current === inlineEditor ? undefined : current));
-    const row = session.rows.get(id);
+    const row = editorRow;
     if (value !== undefined && row) {
       if (field === 'payee') {
         changeRows('Changed payee', [row], {payee: value});
@@ -881,20 +884,12 @@ function Workspace({
                   : transactionCountLabel(visible.length)}
             </span>
             {edits.canUndo && (
-              <button
-                type="button"
-                disabled={edits.busy}
-                onClick={() => edits.replay('undo')}
-              >
+              <button type="button" onClick={() => edits.replay('undo')}>
                 Undo
               </button>
             )}
             {edits.canRedo && (
-              <button
-                type="button"
-                disabled={edits.busy}
-                onClick={() => edits.replay('redo')}
-              >
+              <button type="button" onClick={() => edits.replay('redo')}>
                 Redo
               </button>
             )}
