@@ -313,7 +313,7 @@ async function openWithPausedWrites(page: Page, failAt?: number) {
       await first.focus();
       await page.keyboard.press('N');
       await note.getByRole('textbox').fill(value);
-      await note.getByRole('textbox').press('Enter');
+      await note.getByRole('textbox').blur();
       await expect(note).toHaveText(value);
     },
     async finishWrite(index: number) {
