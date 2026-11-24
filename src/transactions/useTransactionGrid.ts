@@ -3,12 +3,13 @@ import {
   useMemo,
   useRef,
   useState,
+  type ClipboardEvent,
   type FocusEvent,
   type KeyboardEvent,
   type RefObject,
 } from 'react';
 
-import type {Row} from '../data/api';
+import {money, type Metadata, type Row} from '../data/api';
 
 import {
   emptySelection,
@@ -17,12 +18,14 @@ import {
   selectRange,
   toggleRow,
 } from './selection';
+import {categoryName, transactionTags} from './sorting';
 import type {Field} from './transactionActions';
 
 export function useTransactionGrid(
   rows: Row[],
   suspended: boolean,
   fallback: RefObject<HTMLElement | null>,
+  metadata: Metadata | undefined,
 ) {
   const [selection, setSelection] = useState(emptySelection);
   const [active, setActive] = useState<number>();
@@ -68,6 +71,14 @@ export function useTransactionGrid(
   function focusedTransaction() {
     const id = rowId(focusedElement());
     return rows.find(row => row.id === id);
+  }
+
+  function keyboardTargets() {
+    const row = focusedTransaction();
+    if (row) {
+      return selectedRows.length ? selectedRows : [row];
+    }
+    return hasFocus ? selectedRows : [];
   }
 
   function tableElement() {
@@ -301,6 +312,43 @@ export function useTransactionGrid(
     }
   }
 
+  function onCopy(event: ClipboardEvent<HTMLDivElement>) {
+    const target = event.target;
+    if (
+      suspended ||
+      event.defaultPrevented ||
+      !(target instanceof HTMLElement) ||
+      !event.currentTarget.contains(target) ||
+      target.matches('textarea,input:not([type=checkbox])') ||
+      target.isContentEditable ||
+      window.getSelection()?.isCollapsed === false
+    ) {
+      return;
+    }
+
+    const targets = keyboardTargets();
+    if (!targets.length) {
+      return;
+    }
+
+    const details = targets.map(row => {
+      const amount = money(Number(row.amount), row.currency);
+      const tags = transactionTags(row, metadata).map(tag => `[${tag.label}]`);
+      const lines = [`${row.date} ${amount} ${row.payee}`, categoryName(row, metadata)];
+      if (row.notes?.trim()) {
+        lines.push(row.notes);
+      }
+      if (tags.length) {
+        lines.push(`tagged as ${tags.join(' ')}`);
+      }
+      lines.push(`txn:${row.id}`);
+      return lines.join('\n');
+    });
+
+    event.clipboardData.setData('text/plain', details.join('\n\n'));
+    event.preventDefault();
+  }
+
   function onKeyDownCapture(event: KeyboardEvent<HTMLDivElement>) {
     const target = event.target;
     if (
@@ -402,6 +450,7 @@ export function useTransactionGrid(
     focusRow,
     focusTarget,
     focusedTransaction,
+    keyboardTargets,
     move,
     jumpToEdge,
     escape,
@@ -412,7 +461,7 @@ export function useTransactionGrid(
     reset,
     toggleRow: toggleTransaction,
     toggleAll,
-    bindings: {ref, onFocusCapture, onBlurCapture, onKeyDownCapture},
+    bindings: {ref, onFocusCapture, onBlurCapture, onCopy, onKeyDownCapture},
   };
 }
 

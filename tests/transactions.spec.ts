@@ -16,6 +16,41 @@ async function pickCategory(page: Page, query: string) {
   await page.keyboard.press('Enter');
 }
 
+test('copy uses the selected or focused transactions and preserves editor copying', async ({
+  context,
+  page,
+}) => {
+  await context.grantPermissions(['clipboard-read']);
+  await ready(page);
+  const month = currentMonth();
+  const clipboard = () => page.evaluate(() => navigator.clipboard.readText());
+  const greenmarket = `${month}-23 $10.52 Union Square Greenmarket\nGroceries\nProduce and bread\ntagged as [Work]\ntxn:2`;
+  const omny = `${month}-22 $16.89 OMNY\nTransportation\ntagged as [Travel] [Shared]\ntxn:3`;
+
+  for (const [id, details] of [
+    [2, greenmarket],
+    [3, omny],
+    [12, `${month}-13 $74.22 McNally Jackson\nShopping\ntxn:12`],
+  ] as const) {
+    await row(page, id).locator('[data-editor-cell=category] button').focus();
+    await page.keyboard.press('ControlOrMeta+c');
+    await expect.poll(clipboard).toBe(details);
+  }
+
+  await row(page, 3).getByRole('checkbox').check();
+  await row(page, 2).getByRole('checkbox').check();
+  await row(page, 12).focus();
+  await page.keyboard.press('ControlOrMeta+c');
+  await expect.poll(clipboard).toBe(`${greenmarket}\n\n${omny}`);
+
+  await page.keyboard.press('Escape');
+  await row(page, 2).focus();
+  await page.keyboard.press('N');
+  await expect(row(page, 2).getByRole('textbox', {name: 'Note'})).toBeFocused();
+  await page.keyboard.press('ControlOrMeta+c');
+  await expect.poll(clipboard).toBe('Produce and bread');
+});
+
 test('keyboard range shrinks to its anchor, reverses, and honors filtered select all', async ({
   page,
 }) => {

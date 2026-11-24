@@ -197,8 +197,8 @@ function Workspace({
   const inlineEditor = editorRow && rowEditor?.kind === 'inline' ? rowEditor : undefined;
   const cellEditor = editorRow && rowEditor?.kind === 'cell' ? rowEditor : undefined;
   const suspended = Boolean(palette) || Boolean(editorRow);
-  const grid = useTransactionGrid(visible, suspended, commandButton);
-  const {focusedRow, selectedRows} = grid;
+  const grid = useTransactionGrid(visible, suspended, commandButton, metadata);
+  const {focusedRow, keyboardTargets, selectedRows} = grid;
 
   useLayoutEffect(() => {
     grid.endRange();
@@ -347,13 +347,6 @@ function Workspace({
   const canNavigateRows = !suspended && visible.length > 0;
   const enterGridKeys = canNavigateRows && !grid.hasFocus;
   const readyForEdit = !load.isPending;
-  function keyboardTargets() {
-    const row = grid.focusedTransaction();
-    if (row) {
-      return selectedRows.length ? selectedRows : [row];
-    }
-    return grid.hasFocus ? selectedRows : [];
-  }
   useHotkeys([
     {
       hotkey: 'Mod+K',
