@@ -16,9 +16,12 @@ export type Choice = {
   groupLabel?: string;
   members?: number[];
 };
+export type TagChoice = Pick<Choice, 'id' | 'label'> & {
+  color?: string;
+};
 export type Metadata = {
   categories: Choice[];
-  tags: Choice[];
+  tags: TagChoice[];
   accounts: Choice[];
   currency: string;
   cadence: string;
@@ -102,6 +105,26 @@ const categoryAliases: Record<string, string[]> = {
 export const uncategorized = {id: '0', label: 'Uncategorized', aliases: ['no category']};
 export const cash = {id: 'cash', label: 'Cash'};
 
+function tagColor(value?: string | null) {
+  const hex = typeof value === 'string' ? value.trim().replace(/^#/, '') : '';
+  return /^(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/i.test(hex) ? `#${hex}` : undefined;
+}
+
+function tagAccent(tag: Schema['tagObject']) {
+  const text = tagColor(tag.text_color);
+  const background = tagColor(tag.background_color);
+
+  // Lunch Money represents its default swatch as light gray with dark gray text.
+  if (
+    (!background || /^#(?:eee|eeeeee)$/i.test(background)) &&
+    (!text || /^#(?:333|333333)$/i.test(text))
+  ) {
+    return undefined;
+  }
+
+  return background ?? text;
+}
+
 export function liveSource(token: string): DataSource {
   async function request<T>(
     path: string,
@@ -156,7 +179,7 @@ export function liveSource(token: string): DataSource {
             children?: Array<{id: number; name: string}>;
           }>;
         }>('/categories?format=nested', options),
-        request<{tags: Array<{id: number; name: string}>}>('/tags', options),
+        request<{tags: Array<Schema['tagObject']>}>('/tags', options),
         request<{
           manual_accounts: Array<{
             id: number;
@@ -197,7 +220,11 @@ export function liveSource(token: string): DataSource {
             ),
           ]),
         ],
-        tags: tags.tags.map(tag => ({id: String(tag.id), label: tag.name})),
+        tags: tags.tags.map(tag => ({
+          id: String(tag.id),
+          label: tag.name,
+          color: tagAccent(tag),
+        })),
         accounts: [
           cash,
           ...manual.manual_accounts.map(account => ({

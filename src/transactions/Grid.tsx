@@ -21,10 +21,11 @@ import {
   type Header,
   type Row as TableRow,
 } from '@tanstack/react-table';
-import {Check, Minus, Repeat2, Split} from 'lucide-react';
+import {Check, Repeat2, Split} from 'lucide-react';
 
 import {money, type Metadata, type Row} from '../data/api';
 import {NoteEditor, PayeeEditor} from '../editors/Editors';
+import {CheckboxIcon} from '../ui/CheckboxIcon';
 import ui from '../ui/ui.module.css';
 
 import styles from './Grid.module.css';
@@ -32,7 +33,7 @@ import {
   categoryName,
   columns,
   reviewLabel,
-  tagNames,
+  transactionTags,
   type SortColumn,
   type SortDescriptor,
 } from './sorting';
@@ -44,6 +45,7 @@ import {
   type Field,
   type InlineEditorField,
 } from './transactionActions';
+import {TransactionTag} from './TransactionTag';
 import type {GridInteraction} from './useTransactionGrid';
 
 type InlineEditor = {
@@ -376,10 +378,11 @@ const TransactionRow = memo(function TransactionRow({
   const transaction = row.original;
   const {id, payee, date, notes} = transaction;
 
-  function editable(field: Field, text: string, ariaLabel?: string) {
+  function editable(field: Field, value: ReactNode, ariaLabel?: string) {
     const {label, cellLabel} = editActions[field];
     const name = ariaLabel ?? `${cellLabel ?? label} for ${payee}`;
-    const content = <span title={text || undefined}>{text}</span>;
+    const content =
+      typeof value === 'string' ? <span title={value || undefined}>{value}</span> : value;
 
     if (isCellEditorField(field)) {
       return (
@@ -476,7 +479,14 @@ const TransactionRow = memo(function TransactionRow({
           )
         );
       case 'tags':
-        return editable('tags', tagNames(transaction, metadata).join(', '));
+        return editable(
+          'tags',
+          <span className={styles.tagList}>
+            {transactionTags(transaction, metadata).map(tag => (
+              <TransactionTag key={tag.id} {...tag} />
+            ))}
+          </span>,
+        );
       case 'review': {
         const reviewed = transaction.status === 'reviewed';
         const Icon = reviewIcons[reviewed ? 'reviewed' : 'unreviewed'];
@@ -551,7 +561,6 @@ function GridCheckbox({
   change: (extend: boolean) => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
-  const Mark = mixed ? Minus : checked ? Check : null;
 
   useLayoutEffect(() => {
     if (input.current) {
@@ -560,7 +569,7 @@ function GridCheckbox({
   }, [mixed]);
 
   return (
-    <label className={styles.gridCheckbox}>
+    <label className={`${ui.checkbox} ${styles.gridCheckbox}`}>
       <input
         ref={input}
         type="checkbox"
@@ -573,7 +582,10 @@ function GridCheckbox({
           change(event.nativeEvent instanceof MouseEvent && event.nativeEvent.shiftKey)
         }
       />
-      {Mark && <Mark className={styles.checkboxMark} strokeWidth={3} aria-hidden />}
+      <CheckboxIcon
+        className={styles.checkboxMark}
+        state={mixed ? 'mixed' : checked ? 'checked' : 'unchecked'}
+      />
     </label>
   );
 }

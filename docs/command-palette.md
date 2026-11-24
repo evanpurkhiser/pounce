@@ -16,10 +16,10 @@ and its anchor.
 The budget panel stays scoped to the displayed month
 as transaction filters change.
 
-| Key sequence | Command                                       |
+| Shortcut     | Command                                       |
 | ------------ | --------------------------------------------- |
-| `G` then `N` | Go to the next month.                         |
-| `G` then `P` | Go to the previous month.                     |
+| `}`          | Go to the next month.                         |
+| `{`          | Go to the previous month.                     |
 | `G` then `M` | Open **Go to month…** in the command palette. |
 | `G` then `T` | Go to the current month.                      |
 
@@ -133,14 +133,15 @@ With row 5 focused and nothing selected, `Shift+↓` selects rows 5–6.
 Another `Shift+↑` selects rows 4–5.
 
 Field editors and the palette handle their own typing and navigation.
-Suspend direct row shortcuts, month sequences,
+Suspend direct row shortcuts, month shortcuts,
 and the shortcut-overlay binding while an editor or the palette owns focus.
 
 ## Command palette
 
 Open the palette with **⌘K** or **Ctrl+K**.
-Press **Ctrl+N** or **Ctrl+P** to move down or up through commands
-and picker results.
+In commands and picker results,
+press **Ctrl+N** or **Ctrl+J** to move down and **Ctrl+P**
+or **Ctrl+K** to move up.
 Table commands are always available on the Transactions screen.
 They include **Filter**, **Sort by**, **Search**, month navigation,
 and **Undo last edit** or **Redo last edit** when available.
@@ -279,8 +280,7 @@ including the confirmed portion of a bulk edit.
 - **Accessibility and input parity.**
   Verify how focus, selected counts, mixed states,
   and save outcomes are announced.
-  Define the equivalent pointer and touch flows,
-  plus shortcut discovery and an option to turn off single-letter shortcuts.
+  Define the equivalent pointer and touch flows, plus shortcut discovery.
 
 Follow-on filters include **Amount**, **Recurring item**,
 and **Has attachment**.

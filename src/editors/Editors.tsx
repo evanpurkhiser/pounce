@@ -24,7 +24,9 @@ import {
 import {Autocomplete} from '@base-ui/react/autocomplete';
 import {parseDate, type CalendarDate} from '@internationalized/date';
 
-import type {Choice, Range, Row} from '../data/api';
+import type {Choice, Range, Row, TagChoice} from '../data/api';
+import {TransactionTag} from '../transactions/TransactionTag';
+import {KeyboardShortcut} from '../ui/KeyboardShortcut';
 import {Picker, useInitialFocus} from '../ui/Palette';
 import {rank} from '../ui/search';
 import ui from '../ui/ui.module.css';
@@ -367,7 +369,7 @@ export function TagPicker({
   apply,
 }: {
   rows: Row[];
-  choices: Choice[];
+  choices: TagChoice[];
   apply: (changes: Map<number, boolean>) => void;
 }) {
   const [staged, setStaged] = useState(new Map<number, boolean>());
@@ -385,6 +387,7 @@ export function TagPicker({
       const checked = change ?? count === rows.length;
       return {
         ...choice,
+        labelContent: <TransactionTag {...choice} />,
         mark: checked
           ? ('checked' as const)
           : change === undefined && count
@@ -431,7 +434,9 @@ export function TagPicker({
               Reset changes
             </button>
           )}
-          <small>Alt+Enter resets a tag</small>
+          <small>
+            <KeyboardShortcut keys={['alt-Enter']} /> resets a tag
+          </small>
         </>
       }
     />

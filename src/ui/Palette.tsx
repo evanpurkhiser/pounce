@@ -10,7 +10,9 @@ import {Combobox} from '@base-ui/react/combobox';
 import {Dialog} from '@base-ui/react/dialog';
 import {Command} from 'cmdk';
 
+import {CheckboxIcon, type CheckboxState} from './CheckboxIcon';
 import {searchCommands, type CommandItem} from './commandSearch';
+import {KeyboardShortcut} from './KeyboardShortcut';
 import styles from './Palette.module.css';
 import {rank, type Searchable} from './search';
 import ui from './ui.module.css';
@@ -52,7 +54,9 @@ export function Modal({
               </button>
             )}
             <Dialog.Title>{title}</Dialog.Title>
-            <Dialog.Close aria-label="Close">Esc</Dialog.Close>
+            <Dialog.Close aria-label="Close" aria-keyshortcuts="Escape">
+              <KeyboardShortcut keys={['Esc']} />
+            </Dialog.Close>
           </header>
           {children}
         </Dialog.Popup>
@@ -78,6 +82,13 @@ export function useInitialFocus<T extends HTMLElement>(select = false) {
   return ref;
 }
 
+const controlNavigationKeys = new Map([
+  ['n', 'ArrowDown'],
+  ['j', 'ArrowDown'],
+  ['p', 'ArrowUp'],
+  ['k', 'ArrowUp'],
+]);
+
 function navigateWithControl(event: KeyboardEvent) {
   if (
     !event.ctrlKey ||
@@ -89,7 +100,7 @@ function navigateWithControl(event: KeyboardEvent) {
     return false;
   }
 
-  const key = event.key === 'n' ? 'ArrowDown' : event.key === 'p' ? 'ArrowUp' : undefined;
+  const key = controlNavigationKeys.get(event.key);
   if (!key) {
     return false;
   }
@@ -163,9 +174,10 @@ export function CommandList({items}: {items: readonly CommandItem[]}) {
                 aria-description={item.checked ? 'Filter active' : undefined}
               >
                 {item.checked !== undefined ? (
-                  <span className={styles.commandIcon} aria-hidden>
-                    {item.checked ? '✓' : '□'}
-                  </span>
+                  <CheckboxIcon
+                    className={styles.commandIcon}
+                    state={item.checked ? 'checked' : 'unchecked'}
+                  />
                 ) : (
                   item.icon && (
                     <item.icon
@@ -174,11 +186,14 @@ export function CommandList({items}: {items: readonly CommandItem[]}) {
                     />
                   )
                 )}
-                <span className={styles.commandLabel}>{item.label}</span>
+                <span className={styles.commandLabel}>
+                  {item.labelPrefix && `${item.labelPrefix} › `}
+                  {item.labelContent ?? item.label}
+                </span>
                 {item.detail && (
                   <small className={styles.commandDetail}>{item.detail}</small>
                 )}
-                {item.shortcut && <kbd>{item.shortcut}</kbd>}
+                {item.shortcut && <KeyboardShortcut keys={item.shortcut} />}
               </Command.Item>
             ))}
           </Command.Group>
@@ -190,10 +205,11 @@ export function CommandList({items}: {items: readonly CommandItem[]}) {
 
 type PickItem = Searchable & {
   id: string;
+  labelContent?: ReactNode;
   detail?: string;
   group?: boolean;
   groupLabel?: string;
-  mark?: 'checked' | 'mixed' | 'unchecked';
+  mark?: CheckboxState;
 };
 
 export function Picker({
@@ -248,13 +264,9 @@ export function Picker({
   function renderItem(item: PickItem) {
     return (
       <Combobox.Item key={item.id} value={item} className={ui.choice}>
-        {item.mark && (
-          <span aria-hidden className={styles.mark}>
-            {item.mark === 'mixed' ? '−' : item.mark === 'checked' ? '✓' : '□'}
-          </span>
-        )}
+        {item.mark && <CheckboxIcon state={item.mark} />}
         <span>
-          {item.label}
+          {item.labelContent ?? item.label}
           {item.group && (
             <>
               {' '}

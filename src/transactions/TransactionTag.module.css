@@ -1,0 +1,46 @@
+.tag {
+  --tag-color: var(--tag-swatch, light-dark(#696969, #b8b8b8));
+  --tag-accent: oklch(from var(--tag-color) l c h / 1);
+  --tag-fill-base: var(--surface);
+  --tag-fill-tint: 10%;
+
+  display: inline-block;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  overflow: hidden;
+  padding: 0.05rem 0.3rem;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  background: color-mix(
+    in srgb,
+    var(--tag-accent) var(--tag-fill-tint),
+    var(--tag-fill-base)
+  );
+  color: var(--tag-foreground, var(--tag-color));
+  font:
+    0.75rem/1.25 ui-monospace,
+    monospace;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.tag[data-custom-color] {
+  --tag-foreground: light-dark(
+    oklch(from var(--tag-accent) min(l, 0.49) c h),
+    var(--tag-color)
+  );
+  --tag-fill-tint: 16%;
+}
+
+@media (prefers-color-scheme: dark) {
+  .tag[data-custom-color] {
+    --tag-fill-tint: 28%;
+  }
+
+  @supports (color: contrast-color(white)) {
+    .tag[data-custom-color] {
+      --tag-fill-base: contrast-color(var(--tag-accent));
+    }
+  }
+}

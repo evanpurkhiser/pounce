@@ -65,16 +65,12 @@
   grid-column: 1 / -1;
   padding: 0.75rem;
 }
-.gridCheckbox {
+.grid .gridCheckbox {
   display: grid;
   margin: 0.38rem 0.5rem;
   place-items: center;
   width: 1.05rem;
   height: 1.05rem;
-  border: 1px solid var(--checkbox-border);
-  border-radius: 3px;
-  background: var(--surface);
-  cursor: pointer;
 }
 .gridCheckbox input {
   position: absolute;
@@ -85,20 +81,10 @@
   height: 100%;
   cursor: inherit;
 }
-.gridCheckbox:has(:focus-visible) {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-}
-.checkboxMark {
-  display: block;
-  width: 0.8rem;
-  height: 0.8rem;
-  color: var(--on-focus);
+.gridCheckbox .checkboxMark {
+  width: 1.05rem;
+  height: 1.05rem;
   pointer-events: none;
-}
-.gridCheckbox:has(:checked, :indeterminate) {
-  background: var(--focus);
-  border-color: var(--focus);
 }
 .amount {
   text-align: right;
@@ -139,6 +125,9 @@
 }
 .cellAction:hover {
   text-decoration: underline;
+}
+[data-editor-cell='date'] > .cellAction {
+  font-variant-numeric: tabular-nums;
 }
 [data-editor-cell='payee'] {
   font-weight: 650;
@@ -227,6 +216,12 @@ td.amount:focus-visible {
   min-block-size: 1lh;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.cellAction > .tagList {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: center;
+  gap: 0.2rem;
 }
 .grid .reviewCell {
   text-align: center;

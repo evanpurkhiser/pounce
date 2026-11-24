@@ -36,7 +36,9 @@ test('keyboard range shrinks to its anchor, reverses, and honors filtered select
   await page.getByRole('button', {name: 'Commands'}).click();
   await dialog(page).getByRole('combobox').fill('filter resturaunts');
   await expect(
-    dialog(page).getByRole('option', {name: 'Filter › Category › Food › Dining out'}),
+    dialog(page)
+      .getByRole('option', {name: 'Filter › Category › Food › Dining out'})
+      .locator('svg.lucide-square'),
   ).toBeVisible();
   await page.keyboard.press('Enter');
   await expect(selection(page)).toHaveCount(2);
@@ -49,13 +51,17 @@ test('selection and mixed selection marks are centered in their checkboxes', asy
 }) => {
   await ready(page);
   const selected = row(page, 1).getByRole('checkbox');
+  await expect(selected.locator('..').locator('svg.lucide-square')).toBeVisible();
   await selected.check();
 
   const selectAll = page.getByRole('checkbox', {name: 'Select all visible transactions'});
   await expect(selectAll).toHaveJSProperty('indeterminate', true);
-  for (const checkbox of [selected, selectAll]) {
+  for (const [checkbox, iconClass] of [
+    [selected, 'lucide-square-check-big'],
+    [selectAll, 'lucide-square-minus'],
+  ] as const) {
     const label = checkbox.locator('..');
-    const mark = label.locator('svg');
+    const mark = label.locator(`svg.${iconClass}`);
     await expect(mark).toBeVisible();
     const box = (await label.boundingBox())!;
     const icon = (await mark.boundingBox())!;
@@ -94,7 +100,7 @@ test('one selected row opens a searchable category dropdown at its cell', async 
   await expect(search).toBeFocused();
   for (const prefix of ['re', 'res']) {
     await search.fill(prefix);
-    await expect(picker.getByRole('option')).toHaveText(['□Dining out']);
+    await expect(picker.getByRole('option')).toHaveText(['Dining out']);
   }
   await search.fill('resturaunts');
   await page.keyboard.press('Enter');
@@ -372,13 +378,20 @@ test('bulk tag picker keeps mixed memberships until Apply and preserves other ta
   await page.keyboard.press('J');
   await page.keyboard.press('X');
   await page.keyboard.press('T');
-  await expect(dialog(page).getByRole('option', {name: /Travel.*1 of 2/})).toBeVisible();
+  await expect(dialog(page).locator('kbd svg.lucide-option')).toBeVisible();
+  const travel = dialog(page).getByRole('option', {name: /Travel/});
+  await expect(travel).toHaveText(/Travel.*1 of 2/);
+  await expect(travel.locator('svg.lucide-square-minus')).toBeVisible();
   await dialog(page).getByRole('combobox').fill('travel');
   await page.keyboard.press('Enter');
+  await expect(travel.locator('svg.lucide-square-check-big')).toBeVisible();
   await expect(dialog(page).getByRole('button', {name: 'Apply tags'})).toBeEnabled();
   await expect(row(page, 2)).not.toContainText('Travel');
   await dialog(page).getByRole('button', {name: 'Apply tags'}).click();
-  await expect(row(page, 2)).toContainText('Work, Travel');
+  await expect(row(page, 2).locator('[data-editor-cell=tags] [title]')).toHaveText([
+    'Work',
+    'Travel',
+  ]);
   await expect(row(page, 1)).toContainText('Travel');
 });
 
@@ -476,7 +489,7 @@ test('review filter offers the available changes to the current review status', 
   await expect(unreviewed).toBeVisible();
 });
 
-test('month sequences and review advance work with row focus', async ({page}) => {
+test('month shortcuts and review advance work with row focus', async ({page}) => {
   await ready(page);
   await page.getByRole('button', {name: 'Filter', exact: true}).click();
   await dialog(page).getByRole('option', {name: 'Unreviewed', exact: true}).click();
@@ -484,8 +497,14 @@ test('month sequences and review advance work with row focus', async ({page}) =>
   await page.keyboard.press('R');
   await expect(row(page, 1)).toHaveCount(0);
   await expect(row(page, 2)).toBeFocused();
-  await page.keyboard.press('G');
-  await page.keyboard.press('P');
+  const budget = page.getByRole('button', {name: 'Budget', exact: true});
+  await expect(budget).toHaveAttribute('aria-expanded', 'true');
+  await page.keyboard.press('Shift+[');
+  await expect(row(page, 101)).toBeVisible();
+  await page.keyboard.press('Shift+]');
+  await expect(row(page, 2)).toBeVisible();
+  await expect(budget).toHaveAttribute('aria-expanded', 'true');
+  await page.keyboard.press('Shift+[');
   await expect(row(page, 101)).toBeVisible();
   await page.keyboard.press('G');
   await page.keyboard.press('M');
@@ -537,6 +556,28 @@ test('shortcut overlay restores focus and filter modifier adds a second category
   await row(page, 1).focus();
   await page.keyboard.press('Shift+/');
   await expect(dialog(page)).toHaveAccessibleName('Keyboard shortcuts');
+  await expect(
+    dialog(page).getByRole('button', {name: 'Close'}).locator('kbd'),
+  ).toBeVisible();
+  await expect(dialog(page).locator('kbd svg.lucide-option')).toBeVisible();
+  await expect(dialog(page).locator('kbd svg.lucide-arrow-left')).toBeVisible();
+  await expect(dialog(page).locator('kbd svg.lucide-arrow-right')).toBeVisible();
+  await expect(
+    dialog(page)
+      .locator('kbd')
+      .filter({hasText: 'Shift+Up Arrow'})
+      .locator('svg.lucide-arrow-up'),
+  ).toBeVisible();
+  await expect(
+    dialog(page)
+      .locator('kbd')
+      .filter({hasText: 'Shift+Down Arrow'})
+      .locator('svg.lucide-arrow-down'),
+  ).toBeVisible();
+  await expect(dialog(page).locator('kbd').filter({hasText: 'G, then G'})).toBeVisible();
+  const redoShortcut = dialog(page).locator('kbd').filter({hasText: 'Command+Shift+Z'});
+  await expect(redoShortcut.locator('svg.lucide-command')).toBeVisible();
+  await expect(redoShortcut.locator('svg.lucide-arrow-big-up')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(row(page, 1)).toBeFocused();
 
@@ -544,7 +585,10 @@ test('shortcut overlay restores focus and filter modifier adds a second category
   await dialog(page).getByRole('option', {name: 'Category', exact: true}).click();
   const search = dialog(page).getByRole('combobox');
   await search.fill('groceries');
+  const groceries = dialog(page).getByRole('option', {name: 'Groceries', exact: true});
+  await expect(groceries.locator('svg.lucide-square')).toBeVisible();
   await page.keyboard.press('Control+Enter');
+  await expect(groceries.locator('svg.lucide-square-check-big')).toBeVisible();
   await expect(
     page.getByRole('button', {name: 'Remove filter Groceries', includeHidden: true}),
   ).toBeAttached();
@@ -1021,7 +1065,9 @@ test('F opens filters, Ctrl+F clears facets and search, and G T returns to this 
   await expect(dialog(page)).toHaveAccessibleName('Filter');
   await dialog(page).getByRole('option', {name: 'Tag', exact: true}).click();
   await expect(dialog(page).getByRole('option')).toHaveText(['Shared', 'Travel', 'Work']);
-  await dialog(page).getByRole('option', {name: 'Travel'}).click();
+  const travel = dialog(page).getByRole('option', {name: 'Travel'});
+  await expect(travel.getByTitle('Travel')).toBeVisible();
+  await travel.click();
   await expect(page.getByRole('button', {name: 'Remove filter Travel'})).toBeVisible();
 
   const search = page.getByRole('button', {name: 'Search', exact: true});
@@ -1040,7 +1086,8 @@ test('F opens filters, Ctrl+F clears facets and search, and G T returns to this 
   await dialog(page).getByRole('button', {name: 'Show results'}).click();
   await page.keyboard.press('Control+k');
   const clearFilters = dialog(page).getByRole('option', {name: /Clear filters/});
-  await expect(clearFilters.getByText('Ctrl+F', {exact: true})).toBeVisible();
+  await expect(clearFilters).toHaveAccessibleName('Clear filters Control+F');
+  await expect(clearFilters.locator('kbd svg.lucide-chevron-up')).toBeVisible();
   await clearFilters.click();
   await expect(page.getByRole('button', {name: 'Clear search'})).toHaveCount(0);
 
@@ -1053,7 +1100,7 @@ test('F opens filters, Ctrl+F clears facets and search, and G T returns to this 
   await expect(dialog(page)).toHaveCount(0);
 });
 
-test('Ctrl+N and Ctrl+P navigate commands and nested picker results', async ({page}) => {
+test('Control shortcuts navigate commands and nested picker results', async ({page}) => {
   await ready(page);
   await page.keyboard.press('Control+k');
   const input = dialog(page).getByRole('combobox');
@@ -1073,6 +1120,11 @@ test('Ctrl+N and Ctrl+P navigate commands and nested picker results', async ({pa
     await input.press('Control+n');
     await expect(input).toHaveAttribute('aria-activedescendant', next);
     await input.press('Control+p');
+    await expect(input).toHaveAttribute('aria-activedescendant', previous);
+
+    await input.press('Control+j');
+    await expect(input).toHaveAttribute('aria-activedescendant', next);
+    await input.press('Control+k');
     await expect(input).toHaveAttribute('aria-activedescendant', previous);
     await expect(input).toBeFocused();
   }
@@ -1345,6 +1397,7 @@ test('bulk commands align counts and R reviews the selection with confirmation',
   await expect(
     dialog(page)
       .getByRole('option', {name: /Mark 2 reviewed/})
+      .locator('kbd [aria-hidden="true"]')
       .getByText('R', {exact: true}),
   ).toBeVisible();
   await page.keyboard.press('Escape');

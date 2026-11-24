@@ -21,7 +21,6 @@ import {
   monthLabel,
   monthRange,
   shiftMonth,
-  type Choice,
   type Range,
   type Row,
 } from '../data/api';
@@ -55,14 +54,17 @@ import {
   tableCommand,
   transactionCommands,
 } from '../transactions/transactionCommands';
+import {TransactionTag} from '../transactions/TransactionTag';
 import type {Facet, MultiValueFacet} from '../transactions/transactionView';
 import {useTransactionGrid} from '../transactions/useTransactionGrid';
 import {useTransactionView} from '../transactions/useTransactionView';
+import {KeyboardShortcut} from '../ui/KeyboardShortcut';
 import {CommandList, Modal, Picker, useInitialFocus} from '../ui/Palette';
 import paletteStyles from '../ui/Palette.module.css';
 import ui from '../ui/ui.module.css';
 
 import styles from './App.module.css';
+import {ShortcutHelp} from './ShortcutHelp';
 
 type Overlay =
   | {
@@ -150,7 +152,6 @@ function Workspace({
   const [customRange, setCustomRange] = useState<Range>();
   const [surface, setSurface] = useState<WorkspaceSurface>();
   const [cellEditorHandle] = useState(() => Popover.createHandle());
-  const [letterKeys, setLetterKeys] = useState(true);
   const [budgetOpen, setBudgetOpen] = useState(true);
   const budgetButton = useRef<HTMLButtonElement>(null);
   const commandButton = useRef<HTMLButtonElement>(null);
@@ -172,11 +173,14 @@ function Workspace({
     () => edits.rows.filter(row => !row.is_pending),
     [edits.rows],
   );
-  const choices = useMemo<Record<Facet, readonly Choice[]>>(
+  const choices = useMemo(
     () => ({
       review: reviews,
       category: metadata?.categories ?? [],
-      tag: metadata?.tags.toSorted((a, b) => a.label.localeCompare(b.label)) ?? [],
+      tag:
+        metadata?.tags
+          .toSorted((a, b) => a.label.localeCompare(b.label))
+          .map(tag => ({...tag, labelContent: <TransactionTag {...tag} />})) ?? [],
       account: metadata?.accounts ?? [],
     }),
     [metadata],
@@ -339,10 +343,8 @@ function Workspace({
     );
   }
 
-  const shortcutsEnabled = !suspended && letterKeys;
-  const gridKeys = shortcutsEnabled && grid.hasFocus;
+  const gridKeys = !suspended && grid.hasFocus;
   const canNavigateRows = !suspended && visible.length > 0;
-  const rowNavigationKeys = canNavigateRows && letterKeys;
   const enterGridKeys = canNavigateRows && !grid.hasFocus;
   const readyForEdit = !load.isPending;
   function keyboardTargets() {
@@ -371,15 +373,15 @@ function Workspace({
     {
       hotkey: 'S',
       callback: () => open({kind: 'sort'}),
-      options: {enabled: shortcutsEnabled},
+      options: {enabled: !suspended},
     },
     {
       hotkey: 'F',
       callback: () => open({kind: 'filters'}),
-      options: {enabled: shortcutsEnabled},
+      options: {enabled: !suspended},
     },
-    {hotkey: ']', callback: toggleBudget, options: {enabled: shortcutsEnabled}},
-    {hotkey: 'Control+F', callback: clearFilters, options: {enabled: shortcutsEnabled}},
+    {hotkey: ']', callback: toggleBudget, options: {enabled: !suspended}},
+    {hotkey: 'Control+F', callback: clearFilters, options: {enabled: !suspended}},
     {
       hotkey: 'Escape',
       callback: event => {
@@ -392,37 +394,37 @@ function Workspace({
     {
       hotkey: 'Shift+/',
       callback: () => open({kind: 'shortcuts'}),
-      options: {enabled: shortcutsEnabled},
+      options: {enabled: !suspended},
     },
     {
-      hotkey: ['G', 'N'],
+      hotkey: 'Shift+]',
       callback: () => go(shiftMonth(month, 1)),
-      options: {enabled: shortcutsEnabled},
+      options: {enabled: !suspended},
     },
     {
-      hotkey: ['G', 'P'],
+      hotkey: 'Shift+[',
       callback: () => go(shiftMonth(month, -1)),
-      options: {enabled: shortcutsEnabled},
+      options: {enabled: !suspended},
     },
     {
       hotkey: ['G', 'T'],
       callback: () => go(currentMonth()),
-      options: {enabled: shortcutsEnabled},
+      options: {enabled: !suspended},
     },
     {
       hotkey: ['G', 'M'],
       callback: () => open({kind: 'month'}),
-      options: {enabled: shortcutsEnabled},
+      options: {enabled: !suspended},
     },
     {
       hotkey: ['G', 'G'],
       callback: () => grid.jumpToEdge('first'),
-      options: {enabled: rowNavigationKeys},
+      options: {enabled: canNavigateRows},
     },
     {
       hotkey: 'Shift+G',
       callback: () => grid.jumpToEdge('last'),
-      options: {enabled: rowNavigationKeys},
+      options: {enabled: canNavigateRows},
     },
     {
       hotkey: 'ArrowDown',
@@ -440,8 +442,8 @@ function Workspace({
       callback: () => grid.move(-1, false, 0.5),
       options: {enabled: canNavigateRows, ignoreInputs: true},
     },
-    {hotkey: 'J', callback: () => grid.move(1), options: {enabled: rowNavigationKeys}},
-    {hotkey: 'K', callback: () => grid.move(-1), options: {enabled: rowNavigationKeys}},
+    {hotkey: 'J', callback: () => grid.move(1), options: {enabled: canNavigateRows}},
+    {hotkey: 'K', callback: () => grid.move(-1), options: {enabled: canNavigateRows}},
     {hotkey: 'Shift+J', callback: () => grid.move(1, true), options: {enabled: gridKeys}},
     {
       hotkey: 'Shift+K',
@@ -456,12 +458,12 @@ function Workspace({
         const rows = keyboardTargets();
         review(reviewStatusFor(rows), rows);
       },
-      options: {enabled: shortcutsEnabled && readyForEdit},
+      options: {enabled: !suspended && readyForEdit},
     },
     ...Object.values(editActions).map(({field, key}) => ({
       hotkey: key,
       callback: () => showEditor(field, keyboardTargets()),
-      options: {enabled: shortcutsEnabled && readyForEdit},
+      options: {enabled: !suspended && readyForEdit},
     })),
   ]);
 
@@ -593,7 +595,9 @@ function Workspace({
         const checked = filters[facet];
         const items = choices[facet].map(choice => ({
           ...choice,
-          mark: checked.includes(choice.id) ? ('checked' as const) : undefined,
+          mark: checked.includes(choice.id)
+            ? ('checked' as const)
+            : ('unchecked' as const),
         }));
 
         return {
@@ -607,7 +611,10 @@ function Workspace({
               modifierToggle={id => view.toggleFacet(facet, id)}
               footer={
                 <>
-                  <small>⌘Enter / Ctrl+Enter toggles values</small>
+                  <small>
+                    <KeyboardShortcut keys={['cmd-Enter']} /> /{' '}
+                    <KeyboardShortcut keys={['ctrl-Enter']} /> toggles values
+                  </small>
                   <button type="button" onClick={close}>
                     Done
                   </button>
@@ -669,52 +676,7 @@ function Workspace({
       case 'shortcuts':
         return {
           title: 'Keyboard shortcuts',
-          body: (
-            <div className={ui.editor}>
-              <dl className={ui.descriptionList}>
-                <dt>Move between rows</dt>
-                <dd>↑ / ↓ or J / K</dd>
-                <dt>Move between columns</dt>
-                <dd>← / → or Tab / Shift+Tab</dd>
-                <dt>Jump half a page up / down</dt>
-                <dd>Ctrl+U / Ctrl+D</dd>
-                <dt>First / last row</dt>
-                <dd>G G / Shift+G</dd>
-                <dt>Select row or range</dt>
-                <dd>X, Shift+X, Shift+J/K, Shift+↑/↓</dd>
-                <dt>Select visible results</dt>
-                <dd>⌘A / Ctrl+A</dd>
-                <dt>Edit fields</dt>
-                <dd>C category, P payee, D date, N note, T tags</dd>
-                <dt>Review</dt>
-                <dd>R</dd>
-                <dt>Toggle monthly budget</dt>
-                <dd>]</dd>
-                <dt>Sort by</dt>
-                <dd>S</dd>
-                <dt>Filters</dt>
-                <dd>F open, Ctrl+F clear</dd>
-                <dt>Months</dt>
-                <dd>G N next, G P previous, G M go to month, G T current</dd>
-                <dt>Clear focus or selection</dt>
-                <dd>Esc</dd>
-                <dt>Commands</dt>
-                <dd>⌘K / Ctrl+K</dd>
-                <dt>Move through command results</dt>
-                <dd>↑ / ↓ or Ctrl+P / Ctrl+N</dd>
-                <dt>Undo / redo</dt>
-                <dd>⌘Z / ⌘⇧Z or Ctrl equivalents</dd>
-              </dl>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={letterKeys}
-                  onChange={event => setLetterKeys(event.target.checked)}
-                />{' '}
-                Single-letter shortcuts
-              </label>
-            </div>
-          ),
+          body: <ShortcutHelp />,
         };
       case 'edit': {
         const {field} = current;
@@ -746,7 +708,7 @@ function Workspace({
           {live ? 'Connection' : 'Connect Lunch Money'}
         </button>
         <button type="button" onClick={() => open({kind: 'shortcuts'})}>
-          Shortcuts <kbd>?</kbd>
+          Shortcuts <KeyboardShortcut keys={['?']} />
         </button>
         <button
           type="button"
@@ -754,7 +716,7 @@ function Workspace({
           onClick={() => open({kind: 'commands'})}
         >
           <Command className={ui.actionIcon} aria-hidden />
-          Commands <kbd>⌘K</kbd>
+          Commands <KeyboardShortcut keys={['cmd-k']} />
         </button>
       </header>
       <main className={styles.layout}>
@@ -765,6 +727,7 @@ function Workspace({
               type="button"
               onClick={() => go(shiftMonth(month, -1))}
               aria-label="Previous month"
+              aria-keyshortcuts={!suspended ? 'Shift+[' : undefined}
             >
               <ChevronLeft className={ui.actionIcon} aria-hidden />
             </button>
@@ -775,6 +738,7 @@ function Workspace({
               type="button"
               onClick={() => go(shiftMonth(month, 1))}
               aria-label="Next month"
+              aria-keyshortcuts={!suspended ? 'Shift+]' : undefined}
             >
               <ChevronRight className={ui.actionIcon} aria-hidden />
             </button>

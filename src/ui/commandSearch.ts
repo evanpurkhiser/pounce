@@ -1,12 +1,15 @@
+import type {ReactNode} from 'react';
+
 import type {LucideIcon} from 'lucide-react';
 
 import {rank, type Searchable} from './search';
 
 export type CommandItem = Searchable & {
   id: string;
+  labelContent?: ReactNode;
   group: string;
   groupLabel?: string;
-  shortcut?: string;
+  shortcut?: readonly string[];
   detail?: string;
   icon?: LucideIcon;
   checked?: boolean;
@@ -73,7 +76,7 @@ export function searchCommands(items: readonly CommandItem[], input: string) {
   return scopedMatches(items, normalized(input)).map(({trail, ...item}) => ({
     ...item,
     key: JSON.stringify([...trail.map(parent => parent.id), item.id]),
-    label: [...trail.map(parent => parent.label), item.groupLabel, item.label]
+    labelPrefix: [...trail.map(parent => parent.label), item.groupLabel]
       .filter(Boolean)
       .join(' › '),
     group: trail.length ? 'Matches' : item.group,

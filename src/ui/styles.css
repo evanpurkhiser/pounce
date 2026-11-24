@@ -12,7 +12,6 @@
   --border: #c7ccd2;
   --grid-divider: #e7e9ec;
   --focus: #174ed2;
-  --on-focus: white;
   --selection: #dce8ff;
   --button-hover: #eff3fa;
   --shortcut-surface: #f1f3f5;
@@ -22,7 +21,6 @@
   --warning-border: #ca9430;
   --table-heading: #eff1f3;
   --row-focus-surface: #eff5ff;
-  --checkbox-border: #7d8793;
   --edit-surface: #fff3e5;
   --edit-border: #c35113;
   --readonly-surface: #fff0f0;
@@ -50,7 +48,6 @@
     --border: #596576;
     --grid-divider: #303947;
     --focus: #93b6ff;
-    --on-focus: #121f36;
     --selection: #273e65;
     --button-hover: #2a3546;
     --shortcut-surface: #272f3a;
@@ -60,7 +57,6 @@
     --warning-border: #e6b35d;
     --table-heading: #252d38;
     --row-focus-surface: #22324b;
-    --checkbox-border: #8794a6;
     --edit-surface: #3b2c22;
     --edit-border: #ffb37b;
     --readonly-surface: #3b272d;
@@ -123,16 +119,6 @@ button:hover:not(:disabled) {
 [data-focus-visible] {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
-}
-kbd {
-  font:
-    0.85em ui-monospace,
-    monospace;
-  background: var(--shortcut-surface);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 0.05em 0.3em;
-  white-space: nowrap;
 }
 h1,
 h2,

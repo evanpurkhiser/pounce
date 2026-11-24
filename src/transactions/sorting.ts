@@ -1,4 +1,4 @@
-import type {Metadata, Row} from '../data/api';
+import type {Metadata, Row, TagChoice} from '../data/api';
 
 const dateColumn = {
   id: 'date',
@@ -66,9 +66,13 @@ export function categoryName(row: Row, metadata?: Metadata) {
   );
 }
 
-export function tagNames(row: Row, metadata?: Metadata) {
+export function transactionTags(row: Row, metadata?: Metadata): TagChoice[] {
   return row.tag_ids.map(
-    id => metadata?.tags.find(tag => tag.id === String(id))?.label ?? `#${id}`,
+    id =>
+      metadata?.tags.find(tag => tag.id === String(id)) ?? {
+        id: String(id),
+        label: `#${id}`,
+      },
   );
 }
 
@@ -94,7 +98,9 @@ function sortValue(
     case 'note':
       return row.notes ?? '';
     case 'tags':
-      return tagNames(row, metadata).join(', ');
+      return transactionTags(row, metadata)
+        .map(tag => tag.label)
+        .join(', ');
     case 'review':
       return row.status === 'reviewed' ? 1 : 0;
     default:

@@ -51,16 +51,16 @@ export const reviews = [
 ] as const;
 
 const tableActions = {
-  filter: {label: 'Filter', icon: Filter, shortcut: 'F'},
-  clear: {label: 'Clear filters', icon: X, shortcut: 'Ctrl+F'},
-  sort: {label: 'Sort by', icon: ArrowDownUp, shortcut: 'S', aliases: ['sort']},
+  filter: {label: 'Filter', icon: Filter, shortcut: ['f']},
+  clear: {label: 'Clear filters', icon: X, shortcut: ['ctrl-f']},
+  sort: {label: 'Sort by', icon: ArrowDownUp, shortcut: ['s'], aliases: ['sort']},
   search: {label: 'Search', icon: Search},
-  previous: {label: 'Previous month', icon: ChevronLeft, shortcut: 'G P'},
-  next: {label: 'Next month', icon: ChevronRight, shortcut: 'G N'},
-  month: {label: 'Go to month…', icon: CalendarDays, shortcut: 'G M'},
-  current: {label: 'Go to current month', icon: CalendarDays, shortcut: 'G T'},
-  undo: {label: 'Undo last edit', icon: Undo2, shortcut: '⌘Z'},
-  redo: {label: 'Redo last edit', icon: Redo2, shortcut: '⌘⇧Z'},
+  previous: {label: 'Previous month', icon: ChevronLeft, shortcut: ['{']},
+  next: {label: 'Next month', icon: ChevronRight, shortcut: ['}']},
+  month: {label: 'Go to month…', icon: CalendarDays, shortcut: ['g', 'm']},
+  current: {label: 'Go to current month', icon: CalendarDays, shortcut: ['g', 't']},
+  undo: {label: 'Undo last edit', icon: Undo2, shortcut: ['cmd-z']},
+  redo: {label: 'Redo last edit', icon: Redo2, shortcut: ['cmd-shift-z']},
 } satisfies Record<string, Pick<CommandItem, 'label' | 'icon' | 'shortcut' | 'aliases'>>;
 
 export function tableCommand(
@@ -72,7 +72,10 @@ export function tableCommand(
 }
 
 export function filterCommands(
-  choices: Record<MultiValueFacet, readonly Choice[]>,
+  choices: Record<
+    MultiValueFacet,
+    ReadonlyArray<Choice & Pick<CommandItem, 'labelContent'>>
+  >,
   filters: TransactionFilters,
   actions: {
     chooseReview: (status: ReviewStatus | null) => void;
@@ -149,7 +152,7 @@ export function sortCommands(
       invoke: () => choose(),
       group: 'Sort by',
       icon: Search,
-      shortcut: sort ? undefined : 'Current',
+      detail: sort ? undefined : 'Current',
     });
   }
   return items;
@@ -172,7 +175,7 @@ export function transactionCommands(
       icon,
       detail: multiple ? transactionCountLabel(rows.length) : undefined,
       group: 'Transactions',
-      shortcut: key,
+      shortcut: [key],
       invoke: () => edit(field),
     }),
   );
@@ -184,7 +187,7 @@ export function transactionCommands(
         group: 'Transactions',
         label: 'Mark ' + (multiple ? count + ' ' : '') + status,
         icon: reviewIcons[status],
-        shortcut: status === reviewStatusFor(rows) ? reviewShortcut : undefined,
+        shortcut: status === reviewStatusFor(rows) ? [reviewShortcut] : undefined,
         invoke: () => review(status),
       });
     }

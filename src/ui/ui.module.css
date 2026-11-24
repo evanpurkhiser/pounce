@@ -18,6 +18,16 @@
   overflow: hidden;
   clip-path: inset(50%);
 }
+.checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+}
+.checkbox:has(> :focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
 .choice {
   padding: 0.38rem 0.45rem;
   display: flex;
@@ -50,16 +60,4 @@
 .editor textarea {
   resize: vertical;
   width: 100%;
-}
-.descriptionList {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 0.35rem 0.75rem;
-  margin: 0.5rem 0;
-}
-.descriptionList dt {
-  font-weight: 650;
-}
-.descriptionList dd {
-  margin: 0;
 }
