@@ -61,15 +61,3 @@
   resize: vertical;
   width: 100%;
 }
-.descriptionList {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 0.35rem 0.75rem;
-  margin: 0.5rem 0;
-}
-.descriptionList dt {
-  font-weight: 650;
-}
-.descriptionList dd {
-  margin: 0;
-}

@@ -57,13 +57,13 @@ import {TransactionTag} from '../transactions/TransactionTag';
 import type {Facet, MultiValueFacet} from '../transactions/transactionView';
 import {useTransactionGrid} from '../transactions/useTransactionGrid';
 import {useTransactionView} from '../transactions/useTransactionView';
-import {CheckboxIcon} from '../ui/CheckboxIcon';
 import {KeyboardShortcut} from '../ui/KeyboardShortcut';
 import {CommandList, Modal, Picker, useInitialFocus} from '../ui/Palette';
 import paletteStyles from '../ui/Palette.module.css';
 import ui from '../ui/ui.module.css';
 
 import styles from './App.module.css';
+import {ShortcutHelp} from './ShortcutHelp';
 
 type Overlay =
   | {
@@ -675,122 +675,7 @@ function Workspace({
       case 'shortcuts':
         return {
           title: 'Keyboard shortcuts',
-          body: (
-            <div className={ui.editor}>
-              <dl className={ui.descriptionList}>
-                <dt>Move between rows</dt>
-                <dd>
-                  <KeyboardShortcut keys={['↑']} /> / <KeyboardShortcut keys={['↓']} /> or{' '}
-                  <KeyboardShortcut keys={['j']} /> / <KeyboardShortcut keys={['k']} />
-                </dd>
-                <dt>Move between columns</dt>
-                <dd>
-                  <KeyboardShortcut keys={['←']} /> / <KeyboardShortcut keys={['→']} /> or{' '}
-                  <KeyboardShortcut keys={['Tab']} /> /{' '}
-                  <KeyboardShortcut keys={['shift-Tab']} />
-                </dd>
-                <dt>Jump half a page up / down</dt>
-                <dd>
-                  <KeyboardShortcut keys={['ctrl-u']} /> /{' '}
-                  <KeyboardShortcut keys={['ctrl-d']} />
-                </dd>
-                <dt>First / last row</dt>
-                <dd>
-                  <KeyboardShortcut keys={['g', 'g']} /> /{' '}
-                  <KeyboardShortcut keys={['shift-g']} />
-                </dd>
-                <dt>Select row or range</dt>
-                <dd>
-                  <KeyboardShortcut keys={['x']} />,{' '}
-                  <KeyboardShortcut keys={['shift-x']} />,{' '}
-                  <KeyboardShortcut keys={['shift-j']} /> /{' '}
-                  <KeyboardShortcut keys={['shift-k']} />,{' '}
-                  <KeyboardShortcut keys={['shift-↑']} /> /{' '}
-                  <KeyboardShortcut keys={['shift-↓']} />
-                </dd>
-                <dt>Select visible results</dt>
-                <dd>
-                  <KeyboardShortcut keys={['cmd-a']} /> /{' '}
-                  <KeyboardShortcut keys={['ctrl-a']} />
-                </dd>
-                <dt>Edit fields</dt>
-                <dd>
-                  <KeyboardShortcut keys={['c']} /> category,{' '}
-                  <KeyboardShortcut keys={['p']} /> payee,{' '}
-                  <KeyboardShortcut keys={['d']} /> date,{' '}
-                  <KeyboardShortcut keys={['n']} /> note,{' '}
-                  <KeyboardShortcut keys={['t']} /> tags
-                </dd>
-                <dt>Review</dt>
-                <dd>
-                  <KeyboardShortcut keys={[reviewShortcut]} />
-                </dd>
-                <dt>Toggle monthly budget</dt>
-                <dd>
-                  <KeyboardShortcut keys={[']']} />
-                </dd>
-                <dt>Sort by</dt>
-                <dd>
-                  <KeyboardShortcut keys={['s']} />
-                </dd>
-                <dt>Filters</dt>
-                <dd>
-                  <KeyboardShortcut keys={['f']} /> open,{' '}
-                  <KeyboardShortcut keys={['ctrl-f']} /> clear
-                </dd>
-                <dt>Toggle highlighted filter value</dt>
-                <dd>
-                  <KeyboardShortcut keys={['cmd-Enter']} /> /{' '}
-                  <KeyboardShortcut keys={['ctrl-Enter']} />
-                </dd>
-                <dt>Reset highlighted tag change</dt>
-                <dd>
-                  <KeyboardShortcut keys={['alt-Enter']} />
-                </dd>
-                <dt>Months</dt>
-                <dd>
-                  <KeyboardShortcut keys={['}']} /> next,{' '}
-                  <KeyboardShortcut keys={['{']} /> previous,{' '}
-                  <KeyboardShortcut keys={['g', 'm']} /> go to month,{' '}
-                  <KeyboardShortcut keys={['g', 't']} /> current
-                </dd>
-                <dt>Clear focus or selection</dt>
-                <dd>
-                  <KeyboardShortcut keys={['Esc']} />
-                </dd>
-                <dt>Commands</dt>
-                <dd>
-                  <KeyboardShortcut keys={['cmd-k']} /> /{' '}
-                  <KeyboardShortcut keys={['ctrl-k']} />
-                </dd>
-                <dt>Move through commands and picker results</dt>
-                <dd>
-                  <KeyboardShortcut keys={['↑']} /> / <KeyboardShortcut keys={['↓']} /> or{' '}
-                  <KeyboardShortcut keys={['ctrl-p']} /> /{' '}
-                  <KeyboardShortcut keys={['ctrl-n']} /> or{' '}
-                  <KeyboardShortcut keys={['ctrl-k']} /> /{' '}
-                  <KeyboardShortcut keys={['ctrl-j']} />
-                </dd>
-                <dt>Undo / redo</dt>
-                <dd>
-                  <KeyboardShortcut keys={['cmd-z']} /> /{' '}
-                  <KeyboardShortcut keys={['cmd-shift-z']} /> or{' '}
-                  <KeyboardShortcut keys={['ctrl-z']} /> /{' '}
-                  <KeyboardShortcut keys={['ctrl-shift-z']} />
-                </dd>
-              </dl>
-              <label className={ui.checkbox}>
-                <input
-                  className={ui.visuallyHidden}
-                  type="checkbox"
-                  checked={letterKeys}
-                  onChange={event => setLetterKeys(event.target.checked)}
-                />
-                <CheckboxIcon state={letterKeys ? 'checked' : 'unchecked'} />
-                Single-letter shortcuts
-              </label>
-            </div>
-          ),
+          body: <ShortcutHelp letterKeys={letterKeys} setLetterKeys={setLetterKeys} />,
         };
       case 'edit': {
         const {field} = current;
