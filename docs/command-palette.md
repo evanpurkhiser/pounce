@@ -16,10 +16,10 @@ and its anchor.
 The budget panel stays scoped to the displayed month
 as transaction filters change.
 
-| Key sequence | Command                                       |
+| Shortcut     | Command                                       |
 | ------------ | --------------------------------------------- |
-| `G` then `N` | Go to the next month.                         |
-| `G` then `P` | Go to the previous month.                     |
+| `}`          | Go to the next month.                         |
+| `{`          | Go to the previous month.                     |
 | `G` then `M` | Open **Go to month…** in the command palette. |
 | `G` then `T` | Go to the current month.                      |
 
@@ -133,7 +133,7 @@ With row 5 focused and nothing selected, `Shift+↓` selects rows 5–6.
 Another `Shift+↑` selects rows 4–5.
 
 Field editors and the palette handle their own typing and navigation.
-Suspend direct row shortcuts, month sequences,
+Suspend direct row shortcuts, month shortcuts,
 and the shortcut-overlay binding while an editor or the palette owns focus.
 
 ## Command palette

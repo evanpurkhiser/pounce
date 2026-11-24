@@ -489,7 +489,7 @@ test('review filter offers the available changes to the current review status', 
   await expect(unreviewed).toBeVisible();
 });
 
-test('month sequences and review advance work with row focus', async ({page}) => {
+test('month shortcuts and review advance work with row focus', async ({page}) => {
   await ready(page);
   await page.getByRole('button', {name: 'Filter', exact: true}).click();
   await dialog(page).getByRole('option', {name: 'Unreviewed', exact: true}).click();
@@ -497,8 +497,14 @@ test('month sequences and review advance work with row focus', async ({page}) =>
   await page.keyboard.press('R');
   await expect(row(page, 1)).toHaveCount(0);
   await expect(row(page, 2)).toBeFocused();
-  await page.keyboard.press('G');
-  await page.keyboard.press('P');
+  const budget = page.getByRole('button', {name: 'Budget', exact: true});
+  await expect(budget).toHaveAttribute('aria-expanded', 'true');
+  await page.keyboard.press('Shift+[');
+  await expect(row(page, 101)).toBeVisible();
+  await page.keyboard.press('Shift+]');
+  await expect(row(page, 2)).toBeVisible();
+  await expect(budget).toHaveAttribute('aria-expanded', 'true');
+  await page.keyboard.press('Shift+[');
   await expect(row(page, 101)).toBeVisible();
   await page.keyboard.press('G');
   await page.keyboard.press('M');

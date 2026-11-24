@@ -396,12 +396,12 @@ function Workspace({
       options: {enabled: shortcutsEnabled},
     },
     {
-      hotkey: ['G', 'N'],
+      hotkey: 'Shift+]',
       callback: () => go(shiftMonth(month, 1)),
       options: {enabled: shortcutsEnabled},
     },
     {
-      hotkey: ['G', 'P'],
+      hotkey: 'Shift+[',
       callback: () => go(shiftMonth(month, -1)),
       options: {enabled: shortcutsEnabled},
     },
@@ -749,8 +749,8 @@ function Workspace({
                 </dd>
                 <dt>Months</dt>
                 <dd>
-                  <KeyboardShortcut keys={['g', 'n']} /> next,{' '}
-                  <KeyboardShortcut keys={['g', 'p']} /> previous,{' '}
+                  <KeyboardShortcut keys={['}']} /> next,{' '}
+                  <KeyboardShortcut keys={['{']} /> previous,{' '}
                   <KeyboardShortcut keys={['g', 'm']} /> go to month,{' '}
                   <KeyboardShortcut keys={['g', 't']} /> current
                 </dd>
@@ -841,6 +841,7 @@ function Workspace({
               type="button"
               onClick={() => go(shiftMonth(month, -1))}
               aria-label="Previous month"
+              aria-keyshortcuts={shortcutsEnabled ? 'Shift+[' : undefined}
             >
               <ChevronLeft className={ui.actionIcon} aria-hidden />
             </button>
@@ -851,6 +852,7 @@ function Workspace({
               type="button"
               onClick={() => go(shiftMonth(month, 1))}
               aria-label="Next month"
+              aria-keyshortcuts={shortcutsEnabled ? 'Shift+]' : undefined}
             >
               <ChevronRight className={ui.actionIcon} aria-hidden />
             </button>
