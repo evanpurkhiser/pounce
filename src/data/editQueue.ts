@@ -1,11 +1,11 @@
 import type {Row} from './api';
 import {
   editUpdate,
-  message,
   partitionReplay,
   resolvePatch,
   type Edit,
   type EditKind,
+  type WriteIssue,
   type WriteReceipt,
 } from './editChanges';
 
@@ -16,12 +16,16 @@ type Redo = Entry | Save;
 type History = {undo: Entry[]; redo: Redo[]};
 type Phase = {kind: 'idle'} | {kind: 'writing'; job: Job} | {kind: 'recovering'};
 type Completion = {kind: EditKind; label: string; receipt: WriteReceipt};
+export type EditIssue =
+  | WriteIssue
+  | {kind: 'discarded'; count: number}
+  | {kind: 'refreshFailed'; issues: WriteIssue[]};
 
 type State = {
   phase: Phase;
   queued: Job[];
   history: History;
-  issues: string[];
+  issues: EditIssue[];
   completion?: Completion;
 };
 
@@ -30,12 +34,12 @@ type Event =
   | {type: 'replay'; direction: 'undo' | 'redo'}
   | {type: 'started'; job: Job}
   | {type: 'settled'; job: Job; receipt: WriteReceipt; splitId: symbol}
-  | {type: 'recovered'; issue?: string}
+  | {type: 'recovered'; issues: WriteIssue[]}
   | {type: 'clearIssues'};
 
 type Adapter = {
   persist(edit: Edit, kind: EditKind): Promise<WriteReceipt>;
-  refreshRows(ids: number[]): Promise<void>;
+  refreshRows(ids: number[]): Promise<WriteIssue[]>;
 };
 
 const idle: Phase = {kind: 'idle'};
@@ -209,11 +213,9 @@ function transition(state: State, event: Event): State {
       }
 
       const discarded = state.queued.length;
-      const issues = [...receipt.issues];
+      const issues: EditIssue[] = [...receipt.issues];
       if (discarded) {
-        issues.push(
-          `${discarded} queued ${discarded === 1 ? 'edit was' : 'edits were'} discarded.`,
-        );
+        issues.push({kind: 'discarded', count: discarded});
       }
       return {
         ...state,
@@ -231,7 +233,9 @@ function transition(state: State, event: Event): State {
       return {
         ...state,
         phase: idle,
-        issues: event.issue ? [...state.issues, event.issue] : state.issues,
+        issues: event.issues.length
+          ? [...state.issues, {kind: 'refreshFailed', issues: event.issues}]
+          : state.issues,
       };
     case 'clearIssues':
       return {...state, issues: []};
@@ -263,19 +267,14 @@ export function createEditQueue(adapter: Adapter) {
         .catch((error: unknown): WriteReceipt => ({
           written: [],
           alreadySatisfied: new Map(),
-          issues: [message(error)],
+          issues: [{kind: 'unexpectedFailure', error}],
         }));
       dispatch({type: 'settled', job, receipt, splitId: Symbol()});
       if (receipt.issues.length) {
-        try {
-          await adapter.refreshRows(edit.changes.map(({id}) => id));
-          dispatch({type: 'recovered'});
-        } catch (error) {
-          dispatch({
-            type: 'recovered',
-            issue: `Could not refresh transactions. ${message(error)}`,
-          });
-        }
+        const issues = await adapter
+          .refreshRows(edit.changes.map(({id}) => id))
+          .catch((error: unknown): WriteIssue[] => [{kind: 'unexpectedFailure', error}]);
+        dispatch({type: 'recovered', issues});
       }
     }
   }

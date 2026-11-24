@@ -72,9 +72,7 @@ test('an undo conflict reconciles the row with Lunch Money', async () => {
 
   session.edits.replay('undo');
   const state = await settled(session);
-  expect(state.issues).toEqual([
-    `Transaction #${row.id} changed in Lunch Money (notes).`,
-  ]);
+  expect(state.issues).toEqual([{kind: 'conflict', id: row.id, fields: ['notes']}]);
   expect(session.rows.get(row.id)?.notes).toBe('External change');
 });
 
@@ -143,9 +141,11 @@ test('a partially confirmed undo moves only the confirmed fields to redo', async
     update(changes.map(({id, patch}) => ({id, patch: {notes: patch.notes}})));
   session.edits.replay('undo');
   const state = await settled(session);
-  expect(state.issues).toContain(
-    `#${row.id} returned a different value from Lunch Money.`,
-  );
+  expect(state.issues).toContainEqual({
+    kind: 'differentValue',
+    id: row.id,
+    fields: ['payee'],
+  });
   expect(session.rows.get(row.id)).toMatchObject({notes: '', payee: 'New payee'});
   expect(state.history.undo[0].edit.changes[0].after).toEqual({payee: 'New payee'});
   expect(state.history.redo[0]).toMatchObject({
@@ -156,4 +156,51 @@ test('a partially confirmed undo moves only the confirmed fields to redo', async
   session.edits.replay('redo');
   await settled(session);
   expect(session.rows.get(row.id)).toMatchObject({notes: 'New note', payee: 'New payee'});
+});
+
+test('a mismatched transaction read stops undo without changing either row', async () => {
+  const {source, session, page} = await loadSession();
+  const [row, unrelated] = page.rows;
+  session.edits.save({
+    label: 'Changed note',
+    changes: [draftChange(row, {notes: 'Saved note'})!],
+  });
+  await settled(session);
+
+  await source.update([{id: unrelated.id, patch: {notes: 'Unrelated remote note'}}]);
+  const get = source.get;
+  source.get = id => get(id === row.id ? unrelated.id : id);
+  session.edits.replay('undo');
+
+  const state = await settled(session);
+  expect(state.issues[0]).toEqual({kind: 'unavailable', id: row.id});
+  expect(await get(row.id)).toMatchObject({notes: 'Saved note'});
+  expect(session.rows.get(row.id)?.notes).toBe('Saved note');
+  expect(session.rows.get(unrelated.id)?.notes).toBe(unrelated.notes);
+  expect(projectedHistory(state).undo).toHaveLength(1);
+});
+
+test('a local cache failure keeps the confirmed write in undo history', async () => {
+  const {source, session, page} = await loadSession();
+  const [row] = page.rows;
+  const update = session.rows.update;
+  const error = new Error('Fixture interrupted cache update');
+  session.rows.update = () => {
+    session.rows.update = update;
+    throw error;
+  };
+
+  session.edits.save({
+    label: 'Changed note',
+    changes: [draftChange(row, {notes: 'Saved note'})!],
+  });
+  const state = await settled(session);
+  expect(state.issues).toEqual([{kind: 'cacheUpdateFailed', id: row.id, error}]);
+  expect(await source.get(row.id)).toMatchObject({notes: 'Saved note'});
+  expect(session.rows.get(row.id)?.notes).toBe('Saved note');
+  expect(projectedHistory(state).undo).toHaveLength(1);
+
+  session.edits.replay('undo');
+  await settled(session);
+  expect(session.rows.get(row.id)?.notes).toBe('');
 });

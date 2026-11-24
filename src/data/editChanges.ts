@@ -4,19 +4,33 @@ export type Change = {id: number; before: Patch; after: Patch};
 export type Edit = {label: string; changes: Change[]};
 export type EditKind = 'save' | 'undo' | 'redo';
 export type EditableKey = keyof Patch;
+export type WriteIssue =
+  | {kind: 'unavailable' | 'missingConfirmation'; id: number}
+  | {kind: 'conflict' | 'differentValue'; id: number; fields: EditableKey[]}
+  | {kind: 'requestFailed'; operation: 'read' | 'write'; ids: number[]; error: unknown}
+  | {kind: 'cacheUpdateFailed'; id: number; error: unknown}
+  | {kind: 'unexpectedFailure'; error: unknown};
+
 export type WriteReceipt = {
   written: Change[];
   alreadySatisfied: Map<number, EditableKey[]>;
-  issues: string[];
+  issues: WriteIssue[];
 };
 
-export function equal(key: EditableKey, left: unknown, right: unknown) {
-  if (key === 'tag_ids') {
-    const a = new Set(left as number[]);
-    const b = new Set(right as number[]);
-    return a.size === b.size && [...a].every(id => b.has(id));
+export function equalField(key: EditableKey, left: Row | Patch, right: Row | Patch) {
+  if (key === 'notes') {
+    return (left.notes ?? '') === (right.notes ?? '');
   }
-  return key === 'notes' ? (left ?? '') === (right ?? '') : left === right;
+  if (key !== 'tag_ids') {
+    return left[key] === right[key];
+  }
+  if (!left.tag_ids || !right.tag_ids) {
+    return left.tag_ids === right.tag_ids;
+  }
+
+  const a = new Set(left.tag_ids);
+  const b = new Set(right.tag_ids);
+  return a.size === b.size && [...a].every(id => b.has(id));
 }
 
 export function patchKeys(patch: Patch) {
@@ -30,7 +44,7 @@ export function pickFields(values: Patch | Row, fields: EditableKey[]): Patch {
 }
 
 export function draftChange(row: Row, patch: Patch): Change | undefined {
-  const fields = patchKeys(patch).filter(key => !equal(key, row[key], patch[key]));
+  const fields = patchKeys(patch).filter(key => !equalField(key, row, patch));
   if (fields.length) {
     return {
       id: row.id,
