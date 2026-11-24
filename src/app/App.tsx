@@ -26,7 +26,8 @@ import {
   type Row,
 } from '../data/api';
 import {demoSource} from '../data/demo';
-import {createSession, message, queueUpdate, type Session} from '../data/session';
+import {draftChange} from '../data/editChanges';
+import {createSession, message, type Session} from '../data/session';
 import {useEdits} from '../data/useEdits';
 import {useTransactionPages} from '../data/useTransactionPages';
 import {RangeEditor} from '../editors/Editors';
@@ -282,13 +283,13 @@ function Workspace({
     if (overlay) {
       close();
     }
-    edits.save(
+    edits.save({
       label,
-      rows.flatMap(row => {
-        const update = queueUpdate(row, typeof patch === 'function' ? patch(row) : patch);
-        return update ? [update] : [];
+      changes: rows.flatMap(row => {
+        const change = draftChange(row, typeof patch === 'function' ? patch(row) : patch);
+        return change ? [change] : [];
       }),
-    );
+    });
   }
 
   function showEditor(field: Field, rows: Row[]) {

@@ -1,8 +1,4 @@
-import {
-  createCollection,
-  createTransaction,
-  localOnlyCollectionOptions,
-} from '@tanstack/db';
+import {createCollection, localOnlyCollectionOptions} from '@tanstack/db';
 import {QueryClient} from '@tanstack/react-query';
 
 import {
@@ -11,113 +7,27 @@ import {
   listTransactions,
   monthRange,
   type DataSource,
-  type Patch,
   type Range,
   type Row,
   type TransactionPage,
   type Update,
 } from './api';
+import {
+  editUpdate,
+  message,
+  equal,
+  patchKeys,
+  pickFields,
+  resolvePatch,
+  tagChanges,
+  type Edit,
+  type EditKind,
+  type WriteReceipt,
+} from './editChanges';
+import {createEditQueue} from './editQueue';
 
-type Change = {id: number; before: Patch; after: Patch};
-export type Edit = {label: string; changes: Change[]};
-export type WriteResult = {edit: Edit; issues: string[]};
-type EditableKey = keyof Patch;
 type SessionPage = TransactionPage & {writeVersion: number; readVersion: number};
-
-function equal(key: EditableKey, left: unknown, right: unknown) {
-  if (key === 'tag_ids') {
-    const a = new Set(left as number[]);
-    const b = new Set(right as number[]);
-    return a.size === b.size && [...a].every(id => b.has(id));
-  }
-  return key === 'notes' ? (left ?? '') === (right ?? '') : left === right;
-}
-
-function patchValues(row: Row, fields: EditableKey[]): Patch {
-  return Object.fromEntries(
-    fields.map(key => [key, row[key] ?? (key === 'notes' ? '' : null)]),
-  );
-}
-
-function patchKeys(patch: Patch) {
-  return Object.keys(patch) as EditableKey[];
-}
-
-export function partitionReplay(edit: Edit, receipt: Edit) {
-  const saved = new Map(receipt.changes.map(change => [change.id, change.after]));
-  const moved: Change[] = [];
-  const remaining: Change[] = [];
-  for (const {id, before, after} of edit.changes) {
-    const confirmed = saved.get(id);
-    const fields = patchKeys(after);
-    const split = (keys: EditableKey[]) => ({
-      id,
-      before: Object.fromEntries(keys.map(key => [key, before[key]])),
-      after: Object.fromEntries(keys.map(key => [key, after[key]])),
-    });
-    const accepted = fields.filter(key => confirmed && Object.hasOwn(confirmed, key));
-    const rejected = fields.filter(key => !accepted.includes(key));
-    if (accepted.length) {
-      moved.push(split(accepted));
-    }
-    if (rejected.length) {
-      remaining.push(split(rejected));
-    }
-  }
-  return {moved, remaining};
-}
-
-function tagChanges(before: number[], after: number[]) {
-  return {
-    added: after.filter(id => !before.includes(id)),
-    removed: before.filter(id => !after.includes(id)),
-  };
-}
-
-function applyTagChanges(current: number[], added: number[], removed: number[]) {
-  return [...new Set([...current.filter(id => !removed.includes(id)), ...added])];
-}
-
-export type QueuedUpdate = Update & {tags?: ReturnType<typeof tagChanges>};
-export type DraftUpdate = QueuedUpdate & {before: Patch};
-export type ReplayDirection = 'undo' | 'redo';
-
-export function queueUpdate(row: Row, patch: Patch): DraftUpdate | undefined {
-  const fields = patchKeys(patch).filter(key => !equal(key, row[key], patch[key]));
-  if (!fields.length) {
-    return;
-  }
-
-  return {
-    id: row.id,
-    patch: Object.fromEntries(fields.map(key => [key, patch[key]])),
-    before: patchValues(row, fields),
-    tags:
-      fields.includes('tag_ids') && patch.tag_ids
-        ? tagChanges(row.tag_ids, patch.tag_ids)
-        : undefined,
-  };
-}
-
-export function replayUpdates(edit: Edit, direction: ReplayDirection): QueuedUpdate[] {
-  const from = direction === 'undo' ? 'after' : 'before';
-  const to = direction === 'undo' ? 'before' : 'after';
-  return edit.changes.map(change => {
-    const patch = change[to];
-    return {
-      id: change.id,
-      patch,
-      tags: patch.tag_ids && tagChanges(change[from].tag_ids ?? [], patch.tag_ids),
-    };
-  });
-}
-
-export function resolveUpdate(update: QueuedUpdate, row: Row): Patch {
-  const {patch, tags} = update;
-  return tags
-    ? {...patch, tag_ids: applyTagChanges(row.tag_ids, tags.added, tags.removed)}
-    : patch;
-}
+type PreparedUpdate = Update & {original: Row; addTags?: number[]};
 
 export function createSession(source: DataSource) {
   const query = new QueryClient({
@@ -227,100 +137,53 @@ export function createSession(source: DataSource) {
     return ids.map(id => result.get(id)!);
   }
 
-  async function mutate(label: string, changes: Update[]): Promise<WriteResult> {
-    const issues: string[] = [];
-    const committed: Change[] = [];
-    const patches = new Map(changes.map(change => [change.id, change.patch]));
-    const tx = createTransaction({
-      autoCommit: false,
-      mutationFn: async ({transaction}) => {
-        const originals = new Map(
-          transaction.mutations.map(mutation => [Number(mutation.key), mutation]),
+  async function send(updates: PreparedUpdate[], receipt: WriteReceipt) {
+    // Lunch Money requires individual writes for split and grouped rows.
+    const batches = Map.groupBy(updates, ({id, original}, index) =>
+      isSplitOrGrouped(original) ? id : `bulk:${Math.floor(index / 500)}`,
+    );
+
+    for (const batch of batches.values()) {
+      try {
+        const confirmed = await source.update(
+          batch.map(({id, patch, addTags}) => ({id, patch, addTags})),
         );
-        // The bulk endpoint documents restrictions on split and grouped rows.
-        const batches = Map.groupBy(changes, ({id}, index) => {
-          const original = originals.get(id)?.original as Row;
-          return isSplitOrGrouped(original) ? id : `bulk:${Math.floor(index / 500)}`;
-        });
-
-        for (const batch of batches.values()) {
-          try {
-            const sent = batch.map(item => {
-              const original = originals.get(item.id)?.original as Row;
-              const delta =
-                item.patch.tag_ids && tagChanges(original.tag_ids, item.patch.tag_ids);
-              return {
-                ...item,
-                addTags: delta && !delta.removed.length ? delta.added : undefined,
-              };
-            });
-            const addOnly = new Map(
-              sent.flatMap(item =>
-                item.addTags ? [[item.id, item.addTags] as const] : [],
-              ),
-            );
-            const confirmed = await source.update(sent);
-            for (const row of confirmed) {
-              const mutation = originals.get(row.id);
-              const patch = patches.get(row.id);
-              if (!mutation || !patch) {
-                continue;
-              }
-              const requested = patchKeys(patch);
-              const added = addOnly.get(row.id);
-              const saved = requested.filter(key =>
-                key === 'tag_ids' && added
-                  ? added.every(tag => row.tag_ids.includes(tag))
-                  : equal(key, row[key], patch[key]),
-              );
-              if (saved.length !== requested.length) {
-                issues.push(
-                  '#' + row.id + ' returned a different value from Lunch Money.',
-                );
-              }
-              if (saved.length) {
-                const before = patchValues(mutation.original as Row, saved);
-                if (added && saved.includes('tag_ids')) {
-                  before.tag_ids = row.tag_ids.filter(tag => !added.includes(tag));
-                }
-                committed.push({id: row.id, before, after: patchValues(row, saved)});
-              }
-              rows.utils.acceptMutations({
-                mutations: [{...mutation, modified: {...mutation.modified, ...row}}],
-              });
-            }
-            const returned = new Set(confirmed.map(row => row.id));
-            const missing = batch.filter(change => !returned.has(change.id));
-            if (missing.length) {
-              issues.push(
-                'Missing write confirmation for ' +
-                  missing.map(change => '#' + change.id).join(', '),
-              );
-            }
-          } catch (error) {
-            issues.push(
-              `${batch.map(change => '#' + change.id).join(', ')} · ${message(error)}`,
-            );
+        const byId = new Map(confirmed.map(row => [row.id, row]));
+        for (const {id, original, patch, addTags} of batch) {
+          const row = byId.get(id);
+          if (!row) {
+            receipt.issues.push(`Missing write confirmation for #${id}.`);
+            continue;
           }
-          if (issues.length) {
-            break;
+
+          mergeRow(row);
+          const requested = patchKeys(patch);
+          const saved = requested.filter(key =>
+            key === 'tag_ids' && addTags
+              ? addTags.every(tag => row.tag_ids.includes(tag))
+              : equal(key, row[key], patch[key]),
+          );
+          if (saved.length !== requested.length) {
+            receipt.issues.push(`#${id} returned a different value from Lunch Money.`);
+          }
+          if (saved.length) {
+            const before = pickFields(original, saved);
+            if (addTags && saved.includes('tag_ids')) {
+              before.tag_ids = row.tag_ids.filter(tag => !addTags.includes(tag));
+            }
+            receipt.written.push({id, before, after: pickFields(row, saved)});
           }
         }
-
-        if (!committed.length && issues.length) {
-          throw new Error(issues.join('\n'));
-        }
-      },
-    });
-    tx.mutate(() => {
-      for (const {id, patch} of changes) {
-        rows.update(id, row => {
-          Object.assign(row, patch);
-        });
+      } catch (error) {
+        receipt.issues.push(
+          `${batch.map(({id}) => `#${id}`).join(', ')} · ${message(error)}`,
+        );
       }
-    });
-    await tx.commit();
-    return {edit: {label, changes: committed}, issues};
+
+      if (receipt.issues.length) {
+        break;
+      }
+    }
   }
 
   function withWrite<T>(work: () => Promise<T>) {
@@ -338,34 +201,63 @@ export function createSession(source: DataSource) {
     return operation;
   }
 
-  function write(
-    label: string,
-    getUpdates: () => QueuedUpdate[] | Promise<QueuedUpdate[]>,
-  ) {
+  function persist(edit: Edit, kind: EditKind) {
     return withWrite(async () => {
-      const requested = await getUpdates();
-      const requestedTags = requested.filter(({patch}) => patch.tag_ids !== undefined);
-      const freshTags = await getCurrent(requestedTags.map(({id}) => id));
-      const currentTags = new Map(freshTags.map(row => [row.id, row]));
-      const updates = requested
-        .map(update => {
-          const {id, patch} = update;
-          const current = currentTags.get(id);
-          const previous = rows.get(id);
-          if (!current || !previous || patch.tag_ids === undefined) {
-            return {id, patch};
+      const updates = edit.changes.map(change => editUpdate(change, kind));
+      const refreshIds = updates
+        .filter(({patch}) => kind !== 'save' || patch.tag_ids !== undefined)
+        .map(({id}) => id);
+      for (const row of await getCurrent(refreshIds)) {
+        mergeRow(row);
+      }
+
+      const receipt: WriteReceipt = {
+        written: [],
+        alreadySatisfied: new Map(),
+        issues: [],
+      };
+      const prepared: PreparedUpdate[] = [];
+      for (const update of updates) {
+        const {id, expected} = update;
+        const original = rows.get(id);
+        if (!original) {
+          receipt.issues.push(`Transaction #${id} is unavailable.`);
+          continue;
+        }
+
+        const desired = resolvePatch(update, original);
+        const fields = patchKeys(desired);
+        const changed = fields.filter(key => !equal(key, original[key], desired[key]));
+        const satisfied = fields.filter(key => !changed.includes(key));
+        if (satisfied.length) {
+          receipt.alreadySatisfied.set(id, satisfied);
+        }
+        if (kind !== 'save') {
+          const conflicts = changed.filter(
+            key => key !== 'tag_ids' && !equal(key, original[key], expected[key]),
+          );
+          if (conflicts.length) {
+            receipt.issues.push(
+              `Transaction #${id} changed in Lunch Money (${conflicts.join(', ')}).`,
+            );
           }
-          const tags = update.tags ?? tagChanges(previous.tag_ids, patch.tag_ids);
-          mergeRow(current);
-          return {id, patch: resolveUpdate({...update, tags}, current)};
-        })
-        .filter(({id, patch}) => {
-          const row = rows.get(id);
-          return row && patchKeys(patch).some(key => !equal(key, row[key], patch[key]));
-        });
-      return updates.length
-        ? await mutate(label, updates)
-        : {edit: {label, changes: []}, issues: []};
+        }
+        if (changed.length) {
+          const patch = pickFields(desired, changed);
+          const tags = patch.tag_ids && tagChanges(original.tag_ids, patch.tag_ids);
+          prepared.push({
+            id,
+            patch,
+            original,
+            addTags: tags && !tags.removed.length ? tags.added : undefined,
+          });
+        }
+      }
+
+      if (!receipt.issues.length) {
+        await send(prepared, receipt);
+      }
+      return receipt;
     });
   }
 
@@ -377,39 +269,9 @@ export function createSession(source: DataSource) {
     });
   }
 
-  function replay(edit: Edit, direction: ReplayDirection) {
-    const from = direction === 'undo' ? 'after' : 'before';
-    return write(edit.label, async () => {
-      const fresh = await getCurrent(edit.changes.map(change => change.id));
-      for (const row of fresh) {
-        mergeRow(row);
-      }
-
-      return replayUpdates(edit, direction).map((update, index) => {
-        const current = fresh[index];
-        const fields = patchKeys(update.patch);
-        const conflicts = fields.filter(
-          key =>
-            key !== 'tag_ids' &&
-            !equal(key, current[key], edit.changes[index][from][key]),
-        );
-        if (conflicts.length) {
-          throw new Error(
-            'Transaction #' +
-              update.id +
-              ' changed in Lunch Money (' +
-              conflicts.join(', ') +
-              ').',
-          );
-        }
-        return update;
-      });
-    });
-  }
-
-  return {source, query, rows, loadPage, applyPages, write, replay, refreshRows};
+  const edits = createEditQueue({persist, refreshRows});
+  return {source, query, rows, loadPage, applyPages, edits};
 }
 
 export type Session = ReturnType<typeof createSession>;
-export const message = (error: unknown) =>
-  error instanceof Error ? error.message : String(error);
+export {message} from './editChanges';
