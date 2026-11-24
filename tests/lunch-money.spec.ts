@@ -11,7 +11,7 @@ test('loads a connected budget, handles API errors, and restores the connection 
   const {rows: sample} = await fixture.transactionsPage(range, 0);
   sample[0] = {...sample[0], split_parent_id: 100};
   sample[1] = {...sample[1], split_parent_id: 100};
-  sample[2] = {...sample[2], recurring_id: 200};
+  sample[2] = {...sample[2], recurring_id: 200, amount: '-1000.0000', to_base: -1000};
   const offsets: string[] = [];
   const selectionWrites: Array<{path: string; body: unknown}> = [];
 
@@ -135,6 +135,12 @@ test('loads a connected budget, handles API errors, and restores the connection 
   await expect(page.locator('[data-row-id="12"]')).toBeVisible();
   expect(offsets).toEqual(['0', '1000', '1000']);
 
+  await page.emulateMedia({colorScheme: 'light'});
+  const credit = page.getByText('+$1,000.00', {exact: true});
+  await expect(credit).toBeVisible();
+  await expect(credit).toHaveCSS('color', 'rgb(33, 128, 68)');
+  await expect(page.getByText('$10.52', {exact: true})).toBeVisible();
+
   const travelTag = page
     .locator('[data-row-id="1"] [data-editor-cell=tags]')
     .getByTitle('Travel');
@@ -151,6 +157,7 @@ test('loads a connected budget, handles API errors, and restores the connection 
   await expect(workTag).toHaveCSS('color', 'rgb(105, 105, 105)');
   await expect(workTag).toHaveCSS('border-top-color', 'rgb(105, 105, 105)');
   await page.emulateMedia({colorScheme: 'dark'});
+  await expect(credit).toHaveCSS('color', 'rgb(131, 216, 160)');
   await expect(travelTag).toHaveCSS('color', 'rgb(207, 244, 243)');
   await expect(travelTag).toHaveCSS('border-top-color', 'rgb(207, 244, 243)');
   await expect(travelTag).toHaveCSS(
@@ -164,14 +171,14 @@ test('loads a connected budget, handles API errors, and restores the connection 
   await expect(workTag).toHaveCSS('border-top-color', 'rgb(184, 184, 184)');
   await page.emulateMedia({colorScheme: null});
 
-  for (const [id, label] of [
-    [2, 'Split transaction'],
-    [3, 'Recurring transaction'],
+  for (const [id, label, formattedAmount] of [
+    [2, 'Split transaction', '$10.52'],
+    [3, 'Recurring transaction', '+$1,000.00'],
   ] as const) {
     const amount = page.locator(`[data-row-id="${id}"] [data-editor-cell=amount]`);
     const icon = amount.getByRole('img', {name: label});
     await expect(icon).toBeVisible();
-    const value = amount.getByText(/^\$/);
+    const value = amount.getByText(formattedAmount, {exact: true});
     expect((await icon.boundingBox())!.x).toBeLessThan((await value.boundingBox())!.x);
   }
 

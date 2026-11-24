@@ -439,7 +439,11 @@ const TransactionRow = memo(function TransactionRow({
         ) : (
           editable('payee', payee)
         );
-      case 'amount':
+      case 'amount': {
+        const amount = Number(transaction.amount);
+        // Lunch Money uses negative amounts for credits.
+        const isCredit = amount < 0;
+
         return (
           <span className={styles.amountContent}>
             <span className={styles.amountIndicators}>
@@ -459,9 +463,13 @@ const TransactionRow = memo(function TransactionRow({
                 </span>
               )}
             </span>
-            <span>{money(Number(transaction.amount), transaction.currency)}</span>
+            <span className={isCredit ? styles.creditAmount : undefined}>
+              {isCredit ? '+' : ''}
+              {money(Math.abs(amount), transaction.currency)}
+            </span>
           </span>
         );
+      }
       case 'note':
         return inlineEditor?.field === 'note' ? (
           <NoteEditor

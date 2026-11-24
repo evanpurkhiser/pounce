@@ -102,6 +102,9 @@
 .amountIndicators {
   color: var(--text-muted);
 }
+.creditAmount {
+  color: var(--positive);
+}
 .cellAction,
 .grid [data-editing='true'] :is(input[role='combobox'], textarea) {
   display: block;
