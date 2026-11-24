@@ -33,6 +33,3 @@
   align-items: center;
   gap: 0.35rem;
 }
-.help > label {
-  justify-self: start;
-}

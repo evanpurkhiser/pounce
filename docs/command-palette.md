@@ -274,8 +274,7 @@ and retain the history needed to retry.
 - **Accessibility and input parity.**
   Verify how focus, selected counts, mixed states,
   and save outcomes are announced.
-  Define the equivalent pointer and touch flows,
-  plus shortcut discovery and an option to turn off single-letter shortcuts.
+  Define the equivalent pointer and touch flows, plus shortcut discovery.
 
 Follow-on filters include **Amount**, **Recurring item**,
 and **Has attachment**.

@@ -1,7 +1,5 @@
 import {editActions, reviewShortcut} from '../transactions/transactionActions';
-import {CheckboxIcon} from '../ui/CheckboxIcon';
 import {KeyboardShortcut} from '../ui/KeyboardShortcut';
-import ui from '../ui/ui.module.css';
 
 import styles from './ShortcutHelp.module.css';
 
@@ -72,13 +70,7 @@ const groups: Array<{title: string; rows: ShortcutRow[]}> = [
   },
 ];
 
-export function ShortcutHelp({
-  letterKeys,
-  setLetterKeys,
-}: {
-  letterKeys: boolean;
-  setLetterKeys: (enabled: boolean) => void;
-}) {
+export function ShortcutHelp() {
   return (
     <div className={styles.help}>
       {groups.map(({title, rows}) => (
@@ -101,16 +93,6 @@ export function ShortcutHelp({
           </dl>
         </section>
       ))}
-      <label className={ui.checkbox}>
-        <input
-          className={ui.visuallyHidden}
-          type="checkbox"
-          checked={letterKeys}
-          onChange={event => setLetterKeys(event.target.checked)}
-        />
-        <CheckboxIcon state={letterKeys ? 'checked' : 'unchecked'} />
-        Single-letter shortcuts
-      </label>
     </div>
   );
 }

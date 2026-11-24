@@ -151,7 +151,6 @@ function Workspace({
   const [customRange, setCustomRange] = useState<Range>();
   const [surface, setSurface] = useState<WorkspaceSurface>();
   const [cellEditorHandle] = useState(() => Popover.createHandle());
-  const [letterKeys, setLetterKeys] = useState(true);
   const [budgetOpen, setBudgetOpen] = useState(true);
   const budgetButton = useRef<HTMLButtonElement>(null);
   const commandButton = useRef<HTMLButtonElement>(null);
@@ -340,10 +339,8 @@ function Workspace({
     );
   }
 
-  const shortcutsEnabled = !suspended && letterKeys;
-  const gridKeys = shortcutsEnabled && grid.hasFocus;
+  const gridKeys = !suspended && grid.hasFocus;
   const canNavigateRows = !suspended && visible.length > 0;
-  const rowNavigationKeys = canNavigateRows && letterKeys;
   const enterGridKeys = canNavigateRows && !grid.hasFocus;
   const readyForEdit = !edits.busy && !load.isPending;
   function keyboardTargets() {
@@ -372,15 +369,15 @@ function Workspace({
     {
       hotkey: 'S',
       callback: () => open({kind: 'sort'}),
-      options: {enabled: shortcutsEnabled},
+      options: {enabled: !suspended},
     },
     {
       hotkey: 'F',
       callback: () => open({kind: 'filters'}),
-      options: {enabled: shortcutsEnabled},
+      options: {enabled: !suspended},
     },
-    {hotkey: ']', callback: toggleBudget, options: {enabled: shortcutsEnabled}},
-    {hotkey: 'Control+F', callback: clearFilters, options: {enabled: shortcutsEnabled}},
+    {hotkey: ']', callback: toggleBudget, options: {enabled: !suspended}},
+    {hotkey: 'Control+F', callback: clearFilters, options: {enabled: !suspended}},
     {
       hotkey: 'Escape',
       callback: event => {
@@ -393,37 +390,37 @@ function Workspace({
     {
       hotkey: 'Shift+/',
       callback: () => open({kind: 'shortcuts'}),
-      options: {enabled: shortcutsEnabled},
+      options: {enabled: !suspended},
     },
     {
       hotkey: 'Shift+]',
       callback: () => go(shiftMonth(month, 1)),
-      options: {enabled: shortcutsEnabled},
+      options: {enabled: !suspended},
     },
     {
       hotkey: 'Shift+[',
       callback: () => go(shiftMonth(month, -1)),
-      options: {enabled: shortcutsEnabled},
+      options: {enabled: !suspended},
     },
     {
       hotkey: ['G', 'T'],
       callback: () => go(currentMonth()),
-      options: {enabled: shortcutsEnabled},
+      options: {enabled: !suspended},
     },
     {
       hotkey: ['G', 'M'],
       callback: () => open({kind: 'month'}),
-      options: {enabled: shortcutsEnabled},
+      options: {enabled: !suspended},
     },
     {
       hotkey: ['G', 'G'],
       callback: () => grid.jumpToEdge('first'),
-      options: {enabled: rowNavigationKeys},
+      options: {enabled: canNavigateRows},
     },
     {
       hotkey: 'Shift+G',
       callback: () => grid.jumpToEdge('last'),
-      options: {enabled: rowNavigationKeys},
+      options: {enabled: canNavigateRows},
     },
     {
       hotkey: 'ArrowDown',
@@ -441,8 +438,8 @@ function Workspace({
       callback: () => grid.move(-1, false, 0.5),
       options: {enabled: canNavigateRows, ignoreInputs: true},
     },
-    {hotkey: 'J', callback: () => grid.move(1), options: {enabled: rowNavigationKeys}},
-    {hotkey: 'K', callback: () => grid.move(-1), options: {enabled: rowNavigationKeys}},
+    {hotkey: 'J', callback: () => grid.move(1), options: {enabled: canNavigateRows}},
+    {hotkey: 'K', callback: () => grid.move(-1), options: {enabled: canNavigateRows}},
     {hotkey: 'Shift+J', callback: () => grid.move(1, true), options: {enabled: gridKeys}},
     {
       hotkey: 'Shift+K',
@@ -457,12 +454,12 @@ function Workspace({
         const rows = keyboardTargets();
         review(reviewStatusFor(rows), rows);
       },
-      options: {enabled: shortcutsEnabled && readyForEdit},
+      options: {enabled: !suspended && readyForEdit},
     },
     ...Object.values(editActions).map(({field, key}) => ({
       hotkey: key,
       callback: () => showEditor(field, keyboardTargets()),
-      options: {enabled: shortcutsEnabled && readyForEdit},
+      options: {enabled: !suspended && readyForEdit},
     })),
   ]);
 
@@ -675,7 +672,7 @@ function Workspace({
       case 'shortcuts':
         return {
           title: 'Keyboard shortcuts',
-          body: <ShortcutHelp letterKeys={letterKeys} setLetterKeys={setLetterKeys} />,
+          body: <ShortcutHelp />,
         };
       case 'edit': {
         const {field} = current;
@@ -726,7 +723,7 @@ function Workspace({
               type="button"
               onClick={() => go(shiftMonth(month, -1))}
               aria-label="Previous month"
-              aria-keyshortcuts={shortcutsEnabled ? 'Shift+[' : undefined}
+              aria-keyshortcuts={!suspended ? 'Shift+[' : undefined}
             >
               <ChevronLeft className={ui.actionIcon} aria-hidden />
             </button>
@@ -737,7 +734,7 @@ function Workspace({
               type="button"
               onClick={() => go(shiftMonth(month, 1))}
               aria-label="Next month"
-              aria-keyshortcuts={shortcutsEnabled ? 'Shift+]' : undefined}
+              aria-keyshortcuts={!suspended ? 'Shift+]' : undefined}
             >
               <ChevronRight className={ui.actionIcon} aria-hidden />
             </button>
