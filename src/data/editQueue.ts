@@ -9,7 +9,7 @@ import {
   type WriteReceipt,
 } from './editChanges';
 
-type Entry = {id: symbol; edit: Edit};
+type Entry = {kind: 'edit'; id: symbol; edit: Edit};
 type Save = {kind: 'save'; entry: Entry};
 type Job = Save | {kind: 'undo' | 'redo'; entry: Entry};
 type Redo = Entry | Save;
@@ -55,7 +55,7 @@ function pendingJobs(phase: Phase, queued: Job[]) {
 }
 
 function isDraft(item: Redo): item is Save {
-  return 'kind' in item;
+  return item.kind === 'save';
 }
 
 function moveEntry(
@@ -179,7 +179,7 @@ function applyReceipt(
       ? moveEntry(
           history,
           job,
-          {id: splitId, edit: {...entry.edit, changes: moved}},
+          {...entry, id: splitId, edit: {...entry.edit, changes: moved}},
           {...entry, edit: {...entry.edit, changes: remaining}},
         )
       : moveEntry(history, job),
@@ -289,7 +289,7 @@ export function createEditQueue(adapter: Adapter) {
     },
     save(edit: Edit) {
       if (edit.changes.length) {
-        dispatch({type: 'save', entry: {id: Symbol(), edit}});
+        dispatch({type: 'save', entry: {kind: 'edit', id: Symbol(), edit}});
         void drain();
       }
     },

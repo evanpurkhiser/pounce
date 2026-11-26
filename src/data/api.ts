@@ -1,5 +1,5 @@
 import {getLocalTimeZone, parseDate, today} from '@internationalized/date';
-import type {components} from '@lunch-money/lunch-money-js-v2';
+import {LunchMoneyClient, type components} from '@lunch-money/lunch-money-js-v2';
 
 type Schema = components['schemas'];
 export type Row = Schema['transactionObject'];
@@ -106,7 +106,7 @@ export const uncategorized = {id: '0', label: 'Uncategorized', aliases: ['no cat
 export const cash = {id: 'cash', label: 'Cash'};
 
 function tagColor(value?: string | null) {
-  const hex = typeof value === 'string' ? value.trim().replace(/^#/, '') : '';
+  const hex = value?.trim().replace(/^#/, '') ?? '';
   return /^(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/i.test(hex) ? `#${hex}` : undefined;
 }
 
@@ -125,72 +125,22 @@ function tagAccent(tag: Schema['tagObject']) {
   return background ?? text;
 }
 
-export function liveSource(token: string): DataSource {
-  async function request<T>(
-    path: string,
-    options?: {signal?: AbortSignal; body?: unknown},
-  ) {
-    const response = await fetch(`https://api.lunchmoney.dev/v2${path}`, {
-      method: options?.body ? 'PUT' : 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        ...(options?.body ? {'Content-Type': 'application/json'} : {}),
-      },
-      body: options?.body ? JSON.stringify(options.body) : undefined,
-      signal: options?.signal,
-    });
-    if (!response.ok) {
-      const error: unknown = await response.json().catch(() => {});
-      const message =
-        typeof error === 'object' &&
-        error &&
-        'message' in error &&
-        typeof error.message === 'string'
-          ? error.message
-          : response.statusText;
-      const detail =
-        typeof error === 'object' &&
-        error &&
-        'errors' in error &&
-        Array.isArray(error.errors)
-          ? error.errors
-              .flatMap(item => (typeof item?.errMsg === 'string' ? [item.errMsg] : []))
-              .join(' ')
-          : '';
-      throw new Error(
-        [`Lunch Money returned ${response.status}`, message, detail]
-          .filter(Boolean)
-          .join('. '),
-      );
-    }
-    return (await response.json()) as T;
-  }
+export function liveSource(apiKey: string): DataSource {
+  const client = new LunchMoneyClient({apiKey});
+  // SDK methods inherit the abort signal from their client.
+  const forRead = (signal?: AbortSignal) =>
+    signal ? new LunchMoneyClient({apiKey, signal}) : client;
 
   return {
     async metadata(signal) {
-      const options = {signal};
+      const read = forRead(signal);
       const [user, categories, tags, manual, plaid, settings] = await Promise.all([
-        request<{primary_currency: string}>('/me', options),
-        request<{
-          categories: Array<{
-            id: number;
-            name: string;
-            is_group: boolean;
-            children?: Array<{id: number; name: string}>;
-          }>;
-        }>('/categories?format=nested', options),
-        request<{tags: Array<Schema['tagObject']>}>('/tags', options),
-        request<{
-          manual_accounts: Array<{
-            id: number;
-            name: string;
-            display_name?: string | null;
-          }>;
-        }>('/manual_accounts', options),
-        request<{
-          plaid_accounts: Array<{id: number; name: string; display_name?: string | null}>;
-        }>('/plaid_accounts', options),
-        request<{budget_period_granularity: string}>('/budgets/settings', options),
+        read.user.getMe(),
+        read.categories.getAll({format: 'nested'}),
+        read.tags.getAll(),
+        read.manualAccounts.getAll(),
+        read.plaidAccounts.getAll(),
+        read.budgets.getSettings(),
       ]);
       const categoryChoice = (
         category: {id: number; name: string},
@@ -209,7 +159,7 @@ export function liveSource(token: string): DataSource {
         cadence: settings.budget_period_granularity,
         categories: [
           uncategorized,
-          ...categories.categories.flatMap(category => [
+          ...categories.flatMap(category => [
             {
               ...categoryChoice(category),
               group: category.is_group,
@@ -220,18 +170,18 @@ export function liveSource(token: string): DataSource {
             ),
           ]),
         ],
-        tags: tags.tags.map(tag => ({
+        tags: tags.map(tag => ({
           id: String(tag.id),
           label: tag.name,
           color: tagAccent(tag),
         })),
         accounts: [
           cash,
-          ...manual.manual_accounts.map(account => ({
+          ...manual.map(account => ({
             id: `manual:${account.id}`,
             label: account.display_name || account.name,
           })),
-          ...plaid.plaid_accounts.map(account => ({
+          ...plaid.map(account => ({
             id: `plaid:${account.id}`,
             label: account.display_name || account.name,
           })),
@@ -240,34 +190,27 @@ export function liveSource(token: string): DataSource {
     },
     async transactionsPage(range, offset, signal) {
       const limit = 1000;
-      const query = new URLSearchParams({
+      const {transactions, hasMore} = await forRead(signal).transactions.getAll({
         start_date: range.start,
         end_date: range.end,
-        include_pending: 'false',
-        limit: String(limit),
-        offset: String(offset),
+        include_pending: false,
+        limit,
+        offset,
       });
-      const {transactions, has_more} = await request<{
-        transactions: Row[];
-        has_more: boolean;
-      }>(`/transactions?${query}`, {signal});
-      if (has_more && !transactions.length) {
+      if (hasMore && !transactions.length) {
         throw new Error(
           'Lunch Money returned an empty page before the end of the date range.',
         );
       }
-      return {rows: transactions, nextOffset: has_more ? offset + limit : undefined};
+      return {rows: transactions, nextOffset: hasMore ? offset + limit : undefined};
     },
-    get: id => request<Row>(`/transactions/${id}`),
+    get: id => client.transactions.get(id),
     summary: (range, signal) =>
-      request<Summary>(
-        `/summary?${new URLSearchParams({
-          start_date: range.start,
-          end_date: range.end,
-          include_occurrences: 'true',
-        })}`,
-        {signal},
-      ),
+      forRead(signal).summary.get({
+        start_date: range.start,
+        end_date: range.end,
+        include_occurrences: true,
+      }),
     async update(items) {
       function payload(item: Update & {addTags?: number[]}) {
         const {tag_ids, ...fields} = item.patch;
@@ -278,11 +221,11 @@ export function liveSource(token: string): DataSource {
 
       if (items.length === 1) {
         const [item] = items;
-        return [await request<Row>(`/transactions/${item.id}`, {body: payload(item)})];
+        return [await client.transactions.update(item.id, payload(item))];
       }
 
-      const {transactions} = await request<{transactions: Row[]}>('/transactions', {
-        body: {transactions: items.map(item => ({id: item.id, ...payload(item)}))},
+      const {transactions} = await client.transactions.updateMany({
+        transactions: items.map(item => ({id: item.id, ...payload(item)})),
       });
       return transactions;
     },

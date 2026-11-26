@@ -37,7 +37,13 @@ test('loads a connected budget, handles API errors, and restores the connection 
         attempts++;
         expect(body).toEqual({category_id: 1});
         if (attempts === 1) {
-          return json({message: 'Fixture rejected the write'}, 400);
+          return json(
+            {
+              message: 'Fixture rejected the write',
+              errors: [{errMsg: 'Category unavailable'}],
+            },
+            400,
+          );
         }
         return json({...sample[0], category_id: 1});
       }
@@ -219,6 +225,7 @@ test('loads a connected budget, handles API errors, and restores the connection 
   await page.keyboard.press('C');
   await page.getByRole('option', {name: 'Dining out', exact: true}).click();
   await expect(page.getByRole('alert')).toContainText('Fixture rejected the write');
+  await expect(page.getByRole('alert')).toContainText('Category unavailable');
   await expect(first).toContainText('Uncategorized');
   await expect(page.getByRole('button', {name: 'Undo', exact: true})).toHaveCount(0);
   await first.focus();
@@ -328,14 +335,16 @@ async function openWithPausedWrites(page: Page, failAt?: number) {
       return json(row);
     }
 
-    const metadata = {
-      '/me': {primary_currency: 'usd'},
-      '/categories': {categories: []},
-      '/tags': {tags: []},
-      '/manual_accounts': {manual_accounts: []},
-      '/plaid_accounts': {plaid_accounts: []},
-      '/budgets/settings': {budget_period_granularity: 'month'},
-    };
+    const metadata = new Map<string, object>(
+      Object.entries({
+        '/me': {primary_currency: 'usd'},
+        '/categories': {categories: []},
+        '/tags': {tags: []},
+        '/manual_accounts': {manual_accounts: []},
+        '/plaid_accounts': {plaid_accounts: []},
+        '/budgets/settings': {budget_period_granularity: 'month'},
+      }),
+    );
     if (path === '/transactions') {
       const {rows} = await source.transactionsPage(range, 0);
       return json({transactions: rows, has_more: false});
@@ -346,10 +355,8 @@ async function openWithPausedWrites(page: Page, failAt?: number) {
     if (path === '/summary') {
       return json(await source.summary(range));
     }
-    if (path in metadata) {
-      return json(metadata[path as keyof typeof metadata]);
-    }
-    return route.abort();
+    const body = metadata.get(path);
+    return body ? json(body) : route.abort();
   });
   await page.goto('/');
   const first = page.locator('[data-row-id="1"]');
