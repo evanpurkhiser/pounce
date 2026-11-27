@@ -83,43 +83,61 @@ export function reviewLabel(row: Row) {
   return row.status === 'reviewed' ? 'Reviewed' : 'Unreviewed';
 }
 
-function sortValue(
+function sortText(
   row: Row,
-  column: SortDescriptor['column'],
+  column: Exclude<SortColumn, 'amount' | 'review'>,
   metadata?: Metadata,
-): string | number {
+) {
   switch (column) {
     case 'category':
       return categoryName(row, metadata);
     case 'payee':
       return row.payee;
-    case 'amount':
-      return row.to_base;
     case 'note':
       return row.notes ?? '';
     case 'tags':
       return transactionTags(row, metadata)
         .map(tag => tag.label)
         .join(', ');
-    case 'review':
-      return row.status === 'reviewed' ? 1 : 0;
     default:
       return row.date;
   }
 }
 
-export function sortTransactions(rows: Row[], sort: SortDescriptor, metadata?: Metadata) {
-  const direction = sort.direction === 'ascending' ? 1 : -1;
-  return rows
-    .map(row => ({row, value: sortValue(row, sort.column, metadata)}))
-    .sort((a, b) => {
-      const order =
-        typeof a.value === 'number' && typeof b.value === 'number'
-          ? a.value - b.value
-          : collator.compare(String(a.value), String(b.value));
-      return (
-        direction * order || b.row.date.localeCompare(a.row.date) || b.row.id - a.row.id
+export function sortTransactions(
+  rows: Row[],
+  {column, direction}: SortDescriptor,
+  metadata?: Metadata,
+) {
+  const sign = direction === 'ascending' ? 1 : -1;
+
+  function sortBy<Value>(
+    valueOf: (row: Row) => Value,
+    compare: (a: Value, b: Value) => number,
+  ) {
+    return rows
+      .map(row => ({row, value: valueOf(row)}))
+      .sort(
+        (a, b) =>
+          sign * compare(a.value, b.value) ||
+          b.row.date.localeCompare(a.row.date) ||
+          b.row.id - a.row.id,
+      )
+      .map(item => item.row);
+  }
+
+  switch (column) {
+    case 'amount':
+      return sortBy(
+        row => row.to_base,
+        (a, b) => a - b,
       );
-    })
-    .map(item => item.row);
+    case 'review':
+      return sortBy(
+        row => Number(row.status === 'reviewed'),
+        (a, b) => a - b,
+      );
+    default:
+      return sortBy(row => sortText(row, column, metadata), collator.compare);
+  }
 }

@@ -1,3 +1,5 @@
+import {LunchMoneyError} from '@lunch-money/lunch-money-js-v2';
+
 import type {Patch, Row, Update} from './api';
 
 export type Change = {id: number; before: Patch; after: Patch};
@@ -116,5 +118,16 @@ export function partitionReplay(edit: Edit, receipt: WriteReceipt) {
   return {moved, remaining};
 }
 
-export const message = (error: unknown) =>
-  error instanceof Error ? error.message : String(error);
+export function message(error: unknown) {
+  if (error instanceof LunchMoneyError && error.status !== undefined) {
+    const detail = error.errors
+      .map(issue => issue.errMsg)
+      .filter(text => text !== error.message)
+      .join(' ');
+    return [`Lunch Money returned ${error.status}`, error.message, detail]
+      .filter(Boolean)
+      .join('. ');
+  }
+
+  return error instanceof Error ? error.message : String(error);
+}

@@ -171,7 +171,7 @@ const TransactionTable = memo(function TransactionTable({
   const widths: CSSProperties & Record<`--${string}-width`, string> = {};
   const header = table.getHeaderGroups()[0];
   for (const {column} of header.headers) {
-    if (Object.hasOwn(table.state, column.id)) {
+    if (table.state[column.id] !== undefined) {
       widths[`--${column.id}-width`] = `${column.getSize()}px`;
     }
   }
@@ -276,11 +276,7 @@ function TransactionColumnHeader({
 
   function startResize(event: MouseEvent<HTMLSpanElement> | TouchEvent<HTMLSpanElement>) {
     const cell = cellRef.current;
-    if (
-      !cell ||
-      ('button' in event && event.button !== 0) ||
-      ('touches' in event && event.touches.length !== 1)
-    ) {
+    if (!cell) {
       return;
     }
 
@@ -348,8 +344,16 @@ function TransactionColumnHeader({
           className={styles.resizeHandle}
           aria-hidden
           title={`Resize ${column.columnDef.header}`}
-          onMouseDown={startResize}
-          onTouchStart={startResize}
+          onMouseDown={event => {
+            if (event.button === 0) {
+              startResize(event);
+            }
+          }}
+          onTouchStart={event => {
+            if (event.touches.length === 1) {
+              startResize(event);
+            }
+          }}
           onDoubleClick={fitWidth}
           onClick={event => event.stopPropagation()}
         />

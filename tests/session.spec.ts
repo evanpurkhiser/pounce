@@ -120,7 +120,7 @@ test('an already-satisfied undo advances history with one read and no write', as
   expect(calls).toEqual(['read']);
   expect(history.undo.map(({edit}) => edit.label)).toEqual(['Changed note']);
   expect(
-    history.redo.map(entry => ('kind' in entry ? entry.entry : entry).edit.label),
+    history.redo.map(entry => (entry.kind === 'save' ? entry.entry : entry).edit.label),
   ).toEqual(['Set tags']);
 
   session.edits.replay('undo');
