@@ -33,7 +33,7 @@
     "sonner": "^2.0.8"
   },
   "devDependencies": {
-    "@evanpurkhiser/oxc-config": "^0.16.0",
+    "@evanpurkhiser/oxc-config": "^0.20.0",
     "@playwright/test": "^1.65.1",
     "@polka/compression": "^1.0.0-next.25",
     "@types/react": "^19.3.0",
