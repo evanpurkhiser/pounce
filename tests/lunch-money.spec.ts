@@ -3,6 +3,35 @@ import {expect, test, type Page} from '@playwright/test';
 import {monthRange, currentMonth, type Patch} from '../src/data/api';
 import {demoSource} from '../src/data/demo';
 
+import {clientId, connectionKey, discoveryDocument, issuer} from './lunch-money-fixture';
+
+const accessToken = 'test-only-token';
+
+test.skip(!clientId, 'External test builds must supply the Lunch Money client ID.');
+
+test.use({
+  storageState: async ({baseURL}, setStorageState) => {
+    await setStorageState({
+      cookies: [],
+      origins: [
+        {
+          origin: new URL(baseURL!).origin,
+          localStorage: [
+            {
+              name: connectionKey,
+              value: JSON.stringify({
+                accessToken,
+                budgetName: 'Test budget',
+                expiresAt: Date.now() + 3_600_000,
+              }),
+            },
+          ],
+        },
+      ],
+    });
+  },
+});
+
 test('loads a connected budget, handles API errors, and restores the connection after reload', async ({
   page,
 }) => {
@@ -23,10 +52,10 @@ test('loads a connected budget, handles API errors, and restores the connection 
   }
 
   let attempts = 0;
-  await page.route('https://api.lunchmoney.dev/v2/**', async route => {
+  await page.route(`${issuer}/v2/**`, async route => {
     const request = route.request();
     const url = new URL(request.url());
-    expect(request.headers().authorization).toBe('Bearer test-only-token');
+    expect(request.headers().authorization).toBe(`Bearer ${accessToken}`);
     const path = url.pathname.replace('/v2', '');
     const json = (body: unknown, status = 200) =>
       route.fulfill({status, json: body, headers: {'access-control-allow-origin': '*'}});
@@ -132,9 +161,6 @@ test('loads a connected budget, handles API errors, and restores the connection 
     }
   });
   await page.goto('/');
-  await page.getByRole('button', {name: 'Connect Lunch Money'}).click();
-  await page.getByLabel('Lunch Money API token').fill('test-only-token');
-  await page.getByRole('button', {name: 'Connect', exact: true}).click();
   await expect(page.getByText('Lunch Money', {exact: true})).toBeVisible();
   await expect(page.getByRole('alert')).toContainText('Fixture interrupted page two');
   await page.getByRole('button', {name: 'Retry transactions'}).click();
@@ -266,7 +292,7 @@ test('loads a connected budget, handles API errors, and restores the connection 
     },
   ]);
 
-  await page.getByRole('button', {name: 'Undo', exact: true}).click();
+  await page.getByRole('button', {name: 'Undo', exact: true}).press('Enter');
   await expect(page.getByText('Undo complete', {exact: true})).toBeVisible();
   expect(await Promise.all(categoryCells.map(cell => cell.textContent()))).toEqual(
     originalCategories,
@@ -302,6 +328,12 @@ test('loads a connected budget, handles API errors, and restores the connection 
   await expect(page.locator('[data-row-id="12"]')).toBeVisible();
   expect(offsets.slice(-2)).toEqual(['0', '1000']);
 
+  await page.route(`${issuer}/.well-known/oauth-authorization-server`, route =>
+    route.fulfill({json: discoveryDocument}),
+  );
+  await page.route(discoveryDocument.revocation_endpoint, route =>
+    route.fulfill({status: 200, body: ''}),
+  );
   await page.getByRole('button', {name: 'Connection', exact: true}).click();
   await page.getByRole('button', {name: 'Disconnect', exact: true}).click();
   await expect(page.getByText('Sample data', {exact: true})).toBeVisible();
@@ -314,10 +346,7 @@ async function openWithPausedWrites(page: Page, failAt?: number) {
   const source = demoSource();
   const requests: string[] = [];
   const responses: Array<(value: void) => void> = [];
-  await page.addInitScript(() =>
-    localStorage.setItem('pounce.lunchMoneyToken', 'test-only-token'),
-  );
-  await page.route('https://api.lunchmoney.dev/v2/**', async route => {
+  await page.route(`${issuer}/v2/**`, async route => {
     const request = route.request();
     const path = new URL(request.url()).pathname.replace('/v2', '');
     const json = (body: unknown, status = 200) =>

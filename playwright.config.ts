@@ -10,6 +10,7 @@ export default defineConfig({
     : {
         command: 'npm run dev -- --port 5179 --strictPort',
         url: 'http://127.0.0.1:5179',
+        env: {VITE_LUNCH_MONEY_ALPHA_CLIENT_ID: 'pounce-test-client'},
         reuseExistingServer: !process.env.CI,
       },
 });

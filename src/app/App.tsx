@@ -11,21 +11,20 @@ import {
   Search,
   Wallet,
 } from 'lucide-react';
-import {Toaster, toast} from 'sonner';
+import {Toaster} from 'sonner';
 
 import {Budget} from '../budget/Budget';
 import {
   currentMonth,
-  liveSource,
   monthLabel,
   monthRange,
   shiftMonth,
   type Range,
   type Row,
 } from '../data/api';
-import {demoSource} from '../data/demo';
 import {draftChange} from '../data/editChanges';
-import {createSession, message, type Session} from '../data/session';
+import type {OAuthConnection} from '../data/lunchMoneyOAuth';
+import {message, type Session} from '../data/session';
 import {useEdits} from '../data/useEdits';
 import {useTransactionPages} from '../data/useTransactionPages';
 import {RangeEditor} from '../editors/Editors';
@@ -64,7 +63,9 @@ import {shortcuts} from '../ui/shortcuts';
 import ui from '../ui/ui.module.css';
 
 import styles from './App.module.css';
+import {LunchMoneyConnection} from './LunchMoneyConnection';
 import {ShortcutHelp} from './ShortcutHelp';
+import {useLunchMoneyConnection} from './useLunchMoneyConnection';
 
 type Overlay =
   | {
@@ -90,50 +91,17 @@ type WorkspaceSurface =
   | {kind: 'inline'; id: number; field: InlineEditorField}
   | {kind: 'cell'; id: number; field: CellEditorField; anchor: HTMLElement};
 
-const tokenStorageKey = 'pounce.lunchMoneyToken';
-
-function readToken() {
-  try {
-    return localStorage.getItem(tokenStorageKey) ?? undefined;
-  } catch {
-    return;
-  }
-}
-
-function createConnection(id: number, token?: string) {
-  return {
-    session: createSession(token ? liveSource(token) : demoSource()),
-    live: Boolean(token),
-    id,
-  };
-}
-
-export function App() {
-  const [connection, setConnection] = useState(() => createConnection(0, readToken()));
-
-  function connect(token?: string) {
-    try {
-      if (token) {
-        localStorage.setItem(tokenStorageKey, token);
-      } else {
-        localStorage.removeItem(tokenStorageKey);
-      }
-    } catch {
-      if (token) {
-        toast.warning(
-          'The browser could not save the key. This connection lasts until reload.',
-        );
-      } else {
-        toast.warning('The browser could not clear the saved key.');
-      }
-    }
-
-    setConnection(previous => createConnection(previous.id + 1, token));
-  }
+export function App({initialOAuth}: {initialOAuth?: OAuthConnection}) {
+  const {id, session, budgetName, disconnect} = useLunchMoneyConnection(initialOAuth);
 
   return (
-    <QueryClientProvider client={connection.session.query}>
-      <Workspace key={connection.id} {...connection} connect={connect} />
+    <QueryClientProvider client={session.query}>
+      <Workspace
+        key={id}
+        session={session}
+        budgetName={budgetName}
+        disconnect={disconnect}
+      />
       <Toaster theme="system" richColors position="bottom-right" />
     </QueryClientProvider>
   );
@@ -141,13 +109,14 @@ export function App() {
 
 function Workspace({
   session,
-  live,
-  connect,
+  budgetName,
+  disconnect,
 }: {
   session: Session;
-  live: boolean;
-  connect: (token?: string) => void;
+  budgetName?: string;
+  disconnect: () => void;
 }) {
+  const live = Boolean(budgetName);
   const [month, setMonth] = useState(currentMonth);
   const [customRange, setCustomRange] = useState<Range>();
   const [surface, setSurface] = useState<WorkspaceSurface>();
@@ -687,8 +656,8 @@ function Workspace({
         };
       case 'connect':
         return {
-          title: 'Connect Lunch Money',
-          body: <Connect connect={connect} live={live} />,
+          title: live ? 'Lunch Money connection' : 'Connect Lunch Money',
+          body: <LunchMoneyConnection budgetName={budgetName} disconnect={disconnect} />,
         };
       case 'shortcuts':
         return {
@@ -1003,45 +972,6 @@ function SearchEditor({
         <button type="button" onClick={wider}>
           Search a wider date range
         </button>
-      </div>
-    </form>
-  );
-}
-
-function Connect({connect, live}: {connect: (token?: string) => void; live: boolean}) {
-  const [token, setToken] = useState('');
-  return (
-    <form
-      className={ui.editor}
-      onSubmit={event => {
-        event.preventDefault();
-        if (token.trim()) {
-          connect(token.trim());
-        }
-      }}
-    >
-      <label>
-        Lunch Money API token
-        <input
-          type="password"
-          autoComplete="off"
-          value={token}
-          onChange={event => setToken(event.target.value)}
-        />
-      </label>
-      <p>
-        This browser saves your token for this site and sends it directly to Lunch Money.
-        Disconnect clears the saved token.
-      </p>
-      <div className={ui.controls}>
-        <button type="submit" disabled={!token.trim()}>
-          Connect
-        </button>
-        {live && (
-          <button type="button" onClick={() => connect()}>
-            Disconnect
-          </button>
-        )}
       </div>
     </form>
   );

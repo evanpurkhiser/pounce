@@ -26,10 +26,15 @@ npm run dev
 ```
 
 Pounce opens with sample data.
-Choose **Connect Lunch Money**
-and enter an API token to work with your own budget.
-Pounce stores the token in your browser
-and saves live edits directly to Lunch Money.
+To work with your own budget, choose **Connect Lunch Money**,
+then **Authorize with Lunch Money** to sign in and select a budget.
+Pounce saves live edits directly to Lunch Money.
+The browser remembers the connection until it expires or you disconnect.
+
+When hosting Pounce, set `VITE_LUNCH_MONEY_ALPHA_CLIENT_ID` to your registered
+Lunch Money OAuth client ID before serving or building the app.
+Register the app's exact root URL, including the trailing slash,
+as a redirect URI.
 
 ## Develop
 
