@@ -171,7 +171,7 @@ const TransactionTable = memo(function TransactionTable({
   const widths: CSSProperties & Record<`--${string}-width`, string> = {};
   const header = table.getHeaderGroups()[0];
   for (const {column} of header.headers) {
-    if (Object.hasOwn(table.state, column.id)) {
+    if (table.state[column.id] !== undefined) {
       widths[`--${column.id}-width`] = `${column.getSize()}px`;
     }
   }
