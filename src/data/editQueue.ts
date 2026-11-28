@@ -1,12 +1,10 @@
 import type {Row} from './api';
 import {
   editUpdate,
-  partitionReplay,
   resolvePatch,
   type Edit,
   type EditKind,
   type WriteIssue,
-  type WriteReceipt,
 } from './editChanges';
 
 type Entry = {kind: 'edit'; id: symbol; edit: Edit};
@@ -15,7 +13,13 @@ type Job = Save | {kind: 'undo' | 'redo'; entry: Entry};
 type Redo = Entry | Save;
 type History = {undo: Entry[]; redo: Redo[]};
 type Phase = {kind: 'idle'} | {kind: 'writing'; job: Job} | {kind: 'recovering'};
-type Completion = {kind: EditKind; label: string; receipt: WriteReceipt};
+export type EditResult = {
+  applied?: Edit;
+  remaining?: Edit;
+  savedCount?: number;
+  issues: WriteIssue[];
+};
+type Completion = {kind: EditKind; label: string; result: EditResult};
 export type EditIssue =
   | WriteIssue
   | {kind: 'discarded'; count: number}
@@ -33,13 +37,13 @@ type Event =
   | {type: 'save'; entry: Entry}
   | {type: 'replay'; direction: 'undo' | 'redo'}
   | {type: 'started'; job: Job}
-  | {type: 'settled'; job: Job; receipt: WriteReceipt; splitId: symbol}
+  | {type: 'settled'; job: Job; result: EditResult; splitId: symbol}
   | {type: 'recovered'; issues: WriteIssue[]}
   | {type: 'clearIssues'};
 
 type Adapter = {
-  persist(edit: Edit, kind: EditKind): Promise<WriteReceipt>;
-  refreshRows(ids: number[]): Promise<WriteIssue[]>;
+  persist(edit: Edit, kind: EditKind): Promise<EditResult>;
+  recover(edit: Edit): Promise<WriteIssue[]>;
 };
 
 const idle: Phase = {kind: 'idle'};
@@ -80,14 +84,16 @@ function moveEntry(
   };
 }
 
+function recordSave({undo, redo}: History, entry: Entry): History {
+  return {undo: [...undo, entry], redo: redo.filter(isDraft)};
+}
+
 // Reduce the same intents for the optimistic UI and for the history confirmed
 // by receipts. Canceling a pending intent removes its projected effects.
 export function projectedHistory({phase, queued, history}: State) {
   return pendingJobs(phase, queued).reduce(
     (current, job) =>
-      job.kind === 'save'
-        ? {undo: [...current.undo, job.entry], redo: current.redo.filter(isDraft)}
-        : moveEntry(current, job),
+      job.kind === 'save' ? recordSave(current, job.entry) : moveEntry(current, job),
     history,
   );
 }
@@ -150,40 +156,36 @@ function queueReplay(state: State, direction: 'undo' | 'redo'): State {
   return {...state, queued: [...queued, {kind: direction, entry}]};
 }
 
-function applyReceipt(
+function applyResult(
   {history, queued}: State,
-  {job, receipt, splitId}: Extract<Event, {type: 'settled'}>,
+  {job, result: {applied, remaining}, splitId}: Extract<Event, {type: 'settled'}>,
 ) {
   const {entry} = job;
-  if (job.kind === 'save') {
-    if (!receipt.written.length) {
-      return {history, queued: queued.filter(item => item.entry.id !== entry.id)};
-    }
-
-    const confirmed = {...entry, edit: {...entry.edit, changes: receipt.written}};
+  if (!applied) {
     return {
-      history: {undo: [...history.undo, confirmed], redo: history.redo.filter(isDraft)},
-      queued: queued.map(item =>
-        item.entry.id === entry.id ? {...item, entry: confirmed} : item,
-      ),
+      history,
+      queued:
+        job.kind === 'save' ? queued.filter(item => item.entry.id !== entry.id) : queued,
     };
   }
 
-  const {moved, remaining} = partitionReplay(entry.edit, receipt);
-  if (!moved.length) {
-    return {history, queued};
+  const confirmed = {...entry, edit: applied};
+  const updatedQueue = queued.map(item =>
+    item.entry.id === entry.id ? {...item, entry: confirmed} : item,
+  );
+  if (job.kind === 'save') {
+    return {history: recordSave(history, confirmed), queued: updatedQueue};
   }
 
+  const unfinished = remaining && {...entry, edit: remaining};
   return {
-    history: remaining.length
-      ? moveEntry(
-          history,
-          job,
-          {...entry, id: splitId, edit: {...entry.edit, changes: moved}},
-          {...entry, edit: {...entry.edit, changes: remaining}},
-        )
-      : moveEntry(history, job),
-    queued,
+    history: moveEntry(
+      history,
+      job,
+      unfinished ? {...confirmed, id: splitId} : confirmed,
+      unfinished,
+    ),
+    queued: updatedQueue,
   };
 }
 
@@ -205,15 +207,15 @@ function transition(state: State, event: Event): State {
         issues: [],
       };
     case 'settled': {
-      const {job, receipt} = event;
-      const next = applyReceipt(state, event);
-      const completion = {kind: job.kind, label: job.entry.edit.label, receipt};
-      if (!receipt.issues.length) {
+      const {job, result} = event;
+      const next = applyResult(state, event);
+      const completion = {kind: job.kind, label: job.entry.edit.label, result};
+      if (!result.issues.length) {
         return {...state, ...next, phase: idle, completion};
       }
 
       const discarded = state.queued.length;
-      const issues: EditIssue[] = [...receipt.issues];
+      const issues: EditIssue[] = [...result.issues];
       if (discarded) {
         issues.push({kind: 'discarded', count: discarded});
       }
@@ -262,17 +264,15 @@ export function createEditQueue(adapter: Adapter) {
       const {edit} = job.entry;
       dispatch({type: 'started', job});
 
-      const receipt = await adapter
+      const result = await adapter
         .persist(edit, job.kind)
-        .catch((error: unknown): WriteReceipt => ({
-          written: [],
-          alreadySatisfied: new Map(),
+        .catch((error: unknown): EditResult => ({
           issues: [{kind: 'unexpectedFailure', error}],
         }));
-      dispatch({type: 'settled', job, receipt, splitId: Symbol()});
-      if (receipt.issues.length) {
+      dispatch({type: 'settled', job, result, splitId: Symbol()});
+      if (result.issues.length) {
         const issues = await adapter
-          .refreshRows(edit.changes.map(({id}) => id))
+          .recover(edit)
           .catch((error: unknown): WriteIssue[] => [{kind: 'unexpectedFailure', error}]);
         dispatch({type: 'recovered', issues});
       }

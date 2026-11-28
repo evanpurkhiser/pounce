@@ -16,6 +16,7 @@ import {
   editUpdate,
   equalField,
   patchKeys,
+  partitionReplay,
   pickFields,
   resolvePatch,
   tagChanges,
@@ -24,7 +25,7 @@ import {
   type WriteIssue,
   type WriteReceipt,
 } from './editChanges';
-import {createEditQueue} from './editQueue';
+import {createEditQueue, type EditResult} from './editQueue';
 
 type SessionPage = TransactionPage & {writeVersion: number; readVersion: number};
 type PreparedUpdate = Update & {original: Row; addTags?: number[]};
@@ -243,7 +244,7 @@ export function createSession(source: DataSource) {
     return operation;
   }
 
-  function persist(edit: Edit, kind: EditKind) {
+  function writeFields(edit: Edit, kind: EditKind) {
     return withWrite(async () => {
       const updates = edit.changes.map(change => editUpdate(change, kind));
       const refreshIds = updates
@@ -301,11 +302,29 @@ export function createSession(source: DataSource) {
     });
   }
 
-  function refreshRows(ids: number[]) {
-    return withWrite(() => reconcile(ids));
+  async function persist(edit: Edit, kind: EditKind): Promise<EditResult> {
+    const receipt = await writeFields(edit, kind);
+    const {written, issues} = receipt;
+    if (kind === 'save') {
+      return {
+        applied: written.length ? {...edit, changes: written} : undefined,
+        savedCount: written.length,
+        issues,
+      };
+    }
+
+    const {moved, remaining} = partitionReplay(edit, receipt);
+    return {
+      applied: moved.length ? {...edit, changes: moved} : undefined,
+      remaining: remaining.length ? {...edit, changes: remaining} : undefined,
+      issues,
+    };
   }
 
-  const edits = createEditQueue({persist, refreshRows});
+  const edits = createEditQueue({
+    persist,
+    recover: edit => withWrite(() => reconcile(edit.changes.map(({id}) => id))),
+  });
   return {source, query, rows, loadPage, applyPages, edits};
 }
 
