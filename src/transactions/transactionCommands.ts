@@ -9,6 +9,7 @@ import {
   Redo2,
   Search,
   Undo2,
+  Ungroup,
   Wallet,
   X,
 } from 'lucide-react';
@@ -215,12 +216,9 @@ export function groupCommands(
   rows: Row[],
   save: (edit: GroupEdit) => void,
 ): CommandItem[] {
-  if (rows.length < 2 || !rows.every(canGroupTransaction)) {
-    return [];
-  }
-
-  return [
-    {
+  const commands: CommandItem[] = [];
+  if (rows.length >= 2 && rows.every(canGroupTransaction)) {
+    commands.push({
       id: 'group',
       group: 'Transactions',
       label: 'Group transactions',
@@ -230,6 +228,23 @@ export function groupCommands(
           label: 'Grouped transactions',
           group: {kind: 'group', ids: rows.map(row => row.id)},
         }),
-    },
-  ];
+    });
+  }
+
+  const parents = rows.filter(row => row.is_group_parent);
+  if (parents.length) {
+    commands.push({
+      id: 'ungroup',
+      group: 'Transactions',
+      label: 'Ungroup transactions',
+      icon: Ungroup,
+      invoke: () =>
+        save({
+          label: 'Ungrouped transactions',
+          group: {kind: 'ungroup', ids: parents.map(row => row.id)},
+        }),
+    });
+  }
+
+  return commands;
 }

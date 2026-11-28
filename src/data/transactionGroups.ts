@@ -1,7 +1,7 @@
 import {isSplitOrGrouped, type DataSource, type Group, type Row} from './api';
 import {equalField, type EditKind, type WriteIssue} from './editChanges';
 
-export type GroupIntent = {kind: 'group'; ids: number[]};
+type GroupIntent = {kind: 'group' | 'ungroup'; ids: number[]};
 type GroupChange = {kind: 'membership'; before: Group[]; after: Group[]};
 export type GroupEdit = {label: string; group: GroupIntent | GroupChange};
 type GroupReceipt = {
@@ -11,6 +11,7 @@ type GroupReceipt = {
 };
 
 type GroupState = {members: Row[]; parents: Row[]};
+type GroupPlan = {initial: GroupState; target: Group[]};
 
 export function canGroupTransaction(row: Row) {
   return (
@@ -60,7 +61,7 @@ function sameGroups(a: Group[], b: Group[]) {
   );
 }
 
-function describe({parents}: GroupState) {
+function describe(parents: Row[]) {
   return parents.map(row => groupDetails(row, membersOf(row)));
 }
 
@@ -105,33 +106,70 @@ function planGroup(members: Row[]): Group {
   };
 }
 
+async function readMembers(source: DataSource, parents: Row[]) {
+  const parentByMember = new Map(
+    parents.flatMap(parent => membersOf(parent).map(id => [id, parent.id] as const)),
+  );
+  const members = await readRows(source, [...parentByMember.keys()]);
+  if (members.some(row => row.group_parent_id !== parentByMember.get(row.id))) {
+    throw new Error('The transaction groups changed in Lunch Money.');
+  }
+
+  return members;
+}
+
+async function planIntent(
+  source: DataSource,
+  {kind, ids}: GroupIntent,
+): Promise<GroupPlan> {
+  const selected = await readRows(source, ids);
+  if (kind === 'group') {
+    if (selected.length < 2 || !selected.every(canGroupTransaction)) {
+      throw new Error('Grouping requires at least two eligible transactions.');
+    }
+
+    return {initial: {members: selected, parents: []}, target: [planGroup(selected)]};
+  }
+
+  const parents = selected.filter(row => row.is_group_parent);
+  if (!parents.length) {
+    throw new Error('Select at least one transaction group.');
+  }
+
+  const members = await readMembers(source, parents);
+  return {initial: {members, parents}, target: []};
+}
+
+async function planReplay(
+  source: DataSource,
+  edit: GroupChange,
+  kind: EditKind,
+): Promise<GroupPlan> {
+  const [expected, target] =
+    kind === 'undo' ? [edit.after, edit.before] : [edit.before, edit.after];
+  const ids = [...new Set([...expected, ...target].flatMap(group => group.ids))];
+  const initial = await readState(source, ids);
+  if (!sameGroups(describe(initial.parents), expected)) {
+    throw new Error('The transaction groups changed in Lunch Money.');
+  }
+
+  return {initial, target};
+}
+
 export async function persistGroupEdit(
   source: DataSource,
   edit: GroupEdit['group'],
   kind: EditKind,
   sync: (previousParents: Row[], current: GroupState, issues: WriteIssue[]) => void,
 ): Promise<GroupReceipt> {
-  const ids =
+  const {initial, target} =
     edit.kind === 'membership'
-      ? [...new Set([...edit.before, ...edit.after].flatMap(group => group.ids))]
-      : edit.ids;
-  const initial = await readState(source, ids);
-  const before = describe(initial);
+      ? await planReplay(source, edit, kind)
+      : await planIntent(source, edit);
+  const before = describe(initial.parents);
+  const ids = initial.members.map(row => row.id);
   let current = initial;
   const issues: WriteIssue[] = [];
-  const expected =
-    edit.kind === 'membership' ? (kind === 'undo' ? edit.after : edit.before) : [];
-  if (!sameGroups(before, expected)) {
-    sync(initial.parents, initial, issues);
-    throw new Error('The transaction groups changed in Lunch Money.');
-  }
-
-  const target =
-    edit.kind === 'membership'
-      ? kind === 'undo'
-        ? edit.before
-        : edit.after
-      : [planGroup(initial.members)];
   const removing = initial.parents.filter(
     (_, index) => !target.some(group => sameGroup(group, before[index])),
   );
@@ -146,7 +184,11 @@ export async function persistGroupEdit(
 
   if (
     creating.some(group => group.ids.length < 2) ||
-    initial.members.some(row => !canGroupTransaction({...row, group_parent_id: null}))
+    initial.members.some(
+      row =>
+        creating.some(group => group.ids.includes(row.id)) &&
+        !canGroupTransaction({...row, group_parent_id: null}),
+    )
   ) {
     throw new Error('Grouping requires at least two eligible transactions.');
   }
@@ -182,7 +224,7 @@ export async function persistGroupEdit(
     issues.push({kind: 'requestFailed', operation: 'write', ids, error});
     try {
       const observed = await readState(source, ids);
-      const observedGroups = describe(observed);
+      const observedGroups = describe(observed.parents);
       sync([...initial.parents, ...current.parents], observed, issues);
 
       // A request can succeed even if its response is lost. Only attribute
@@ -204,7 +246,7 @@ export async function persistGroupEdit(
     sync(initial.parents, current, issues);
   }
 
-  const after = describe(current);
+  const after = describe(current.parents);
   const change = (from: Group[], to: Group[]): GroupChange =>
     kind === 'undo'
       ? {kind: 'membership', before: to, after: from}
