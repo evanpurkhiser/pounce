@@ -125,11 +125,11 @@ function tagAccent(tag: Schema['tagObject']) {
   return background ?? text;
 }
 
-export function liveSource(apiKey: string): DataSource {
-  const client = new LunchMoneyClient({apiKey});
+export function liveSource(accessToken: string, baseUrl: string): DataSource {
+  const client = new LunchMoneyClient({apiKey: accessToken, baseUrl});
   // SDK methods inherit the abort signal from their client.
   const forRead = (signal?: AbortSignal) =>
-    signal ? new LunchMoneyClient({apiKey, signal}) : client;
+    signal ? new LunchMoneyClient({apiKey: accessToken, baseUrl, signal}) : client;
 
   return {
     async metadata(signal) {
