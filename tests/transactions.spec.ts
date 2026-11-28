@@ -1671,6 +1671,41 @@ test('the group shortcut handles eligible selections with grid focus', async ({p
   await expect(page.getByRole('grid').getByText('$14.67', {exact: true})).toBeVisible();
 });
 
+for (const openWith of ['shortcut', 'button'] as const) {
+  test(`ungroups a focused group from the palette opened by ${openWith}`, async ({
+    page,
+  }) => {
+    await ready(page);
+    await row(page, 1).getByRole('checkbox').check();
+    await row(page, 2).getByRole('checkbox').check();
+    await invokeTransactionCommand(page, 'Group transactions');
+
+    const group = page.getByRole('row').filter({
+      has: page.getByText('$14.67', {exact: true}),
+    });
+    await expect(page.getByText('10 transactions', {exact: true})).toBeVisible();
+    await group.focus();
+    await expect(selection(page)).toHaveCount(0);
+
+    if (openWith === 'shortcut') {
+      await page.keyboard.press('ControlOrMeta+k');
+    } else {
+      await page.getByRole('button', {name: 'Commands'}).click();
+    }
+
+    await dialog(page).getByRole('combobox').fill('Ungroup transactions');
+    await dialog(page)
+      .getByRole('option', {name: /^Ungroup transactions\b/})
+      .click();
+    await expect(group).toHaveCount(0);
+    await expect(row(page, 1)).toBeVisible();
+    await expect(row(page, 2)).toBeVisible();
+
+    await page.keyboard.press('ControlOrMeta+z');
+    await expect(group).toBeVisible();
+  });
+}
+
 test('ungroups selected groups and keeps individual transactions selected', async ({
   page,
 }) => {

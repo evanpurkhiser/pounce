@@ -349,7 +349,7 @@ function Workspace({
   const enterGridKeys = canNavigateRows && !grid.hasFocus;
   const readyForEdit = !load.isPending;
   const groupingCommands = readyForEdit
-    ? groupCommands(selectedRows, edit => {
+    ? groupCommands(palette ? commandTargets() : selectedRows, edit => {
         if (palette) {
           close();
         }
@@ -748,6 +748,12 @@ function Workspace({
         <button
           type="button"
           ref={commandButton}
+          onMouseDown={event => {
+            // Keep the focused row as the palette origin when opening with the mouse.
+            if (event.button === 0 && focusedRow) {
+              event.preventDefault();
+            }
+          }}
           onClick={() => open({kind: 'commands'})}
         >
           Commands <KeyboardShortcut binding={shortcuts.commands} />
