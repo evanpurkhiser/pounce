@@ -10,6 +10,7 @@ import {
 } from 'react';
 
 import {money, type Metadata, type Row} from '../data/api';
+import {groupPreviewId} from '../data/groupProjection';
 
 import {
   emptySelection,
@@ -32,6 +33,7 @@ export function useTransactionGrid(
   const [hasFocus, setHasFocus] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const tabStop = useRef<HTMLElement | null>(null);
+  const focusVersion = useRef(0);
   const previousOrder = useRef<number[]>([]);
   const order = useMemo(() => rows.map(row => row.id), [rows]);
   const visible = useMemo(() => new Set(order), [order]);
@@ -132,14 +134,36 @@ export function useTransactionGrid(
 
     if (active !== undefined && !visible.has(active)) {
       const index = previousOrder.current.indexOf(active);
-      const next = order[Math.min(Math.max(0, index), order.length - 1)];
+      const confirmedGroup =
+        active < 0
+          ? rows.find(
+              row =>
+                row.is_group_parent &&
+                row.children?.length &&
+                groupPreviewId(row.children.map(child => child.id)) === active,
+            )
+          : undefined;
+      const next =
+        confirmedGroup?.id ?? order[Math.min(Math.max(0, index), order.length - 1)];
       setActive(next);
 
-      if (!suspended && (hasFocus || ref.current?.contains(document.activeElement))) {
+      const focused = document.activeElement;
+      if (
+        !suspended &&
+        (hasFocus ||
+          ref.current?.contains(focused) ||
+          (confirmedGroup && focused === document.body))
+      ) {
+        const version = focusVersion.current;
         requestAnimationFrame(() => {
+          if (version !== focusVersion.current) {
+            return;
+          }
+
+          const current = document.activeElement;
           if (
-            document.activeElement === document.body ||
-            ref.current?.contains(document.activeElement)
+            current === document.body ||
+            (current === focused && ref.current?.contains(current))
           ) {
             focusRow(next);
           }
@@ -147,7 +171,7 @@ export function useTransactionGrid(
       }
     }
     previousOrder.current = order;
-  }, [visible, active, hasFocus, suspended, order]);
+  }, [visible, active, hasFocus, suspended, order, rows]);
 
   function move(direction: -1 | 1, extend = false, pageFraction?: number) {
     if (!order.length) {
@@ -291,6 +315,7 @@ export function useTransactionGrid(
       return;
     }
 
+    focusVersion.current++;
     setHasFocus(true);
     setActive(rowId(target));
 

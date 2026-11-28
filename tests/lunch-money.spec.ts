@@ -1,6 +1,6 @@
 import {expect, test, type Page} from '@playwright/test';
 
-import {monthRange, currentMonth, type Patch} from '../src/data/api';
+import {monthRange, currentMonth, type Group, type Patch} from '../src/data/api';
 import {demoSource} from '../src/data/demo';
 
 test('loads a connected budget, handles API errors, and restores the connection after reload', async ({
@@ -324,6 +324,13 @@ async function openWithPausedWrites(page: Page, failAt?: number) {
       route.fulfill({status, json: body, headers: {'access-control-allow-origin': '*'}});
     const range = monthRange(currentMonth());
     const id = Number(path.split('/')[2]);
+    if (path === '/transactions/group' && request.method() === 'POST') {
+      const group: Group = request.postDataJSON();
+      requests.push('group');
+      await new Promise<void>(resolve => responses.push(resolve));
+      return json(await source.group(group), 201);
+    }
+
     if (request.method() === 'PUT') {
       const patch: Patch = request.postDataJSON();
       const index = requests.push(patch.notes ?? '') - 1;
@@ -377,6 +384,36 @@ async function openWithPausedWrites(page: Page, failAt?: number) {
       responses[index]();
     },
   };
+}
+
+for (const keepFocus of [true, false]) {
+  test(
+    keepFocus
+      ? 'group confirmation keeps the group focused'
+      : 'group confirmation preserves focus moved to another row',
+    async ({page}) => {
+      const {finishWrite} = await openWithPausedWrites(page);
+      for (const id of [1, 2]) {
+        await page.locator(`[data-row-id="${id}"]`).getByRole('checkbox').check();
+      }
+      await page.locator('[data-row-id="1"]').focus();
+      await page.keyboard.press('ControlOrMeta+g');
+      const preview = page.locator('[data-row-id="-1"]');
+      await expect(preview).toBeFocused();
+      const other = page.locator('[data-row-id="3"]');
+      if (!keepFocus) {
+        await other.focus();
+      }
+
+      await finishWrite(0);
+      await expect(preview).toHaveCount(0);
+      const group = page.locator('[data-row-id]').filter({
+        has: page.getByText('$14.67', {exact: true}),
+      });
+      await expect(group).toBeVisible();
+      await expect(keepFocus ? group : other).toBeFocused();
+    },
+  );
 }
 
 test('undo and redo edit the queue before making another request', async ({page}) => {

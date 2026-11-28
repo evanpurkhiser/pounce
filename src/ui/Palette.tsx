@@ -29,7 +29,7 @@ export function Modal({
   title: string;
   children: ReactNode;
   close: () => void;
-  restore: () => HTMLElement | null;
+  restore: () => HTMLElement | null | false;
   back?: () => void;
   wide?: boolean;
 }) {

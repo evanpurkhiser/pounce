@@ -54,6 +54,19 @@ function replayLayout(
   return {parents, members, target: kind === 'undo' ? before : after};
 }
 
+export function hasGroupMembers(row: Row, ids: number[]) {
+  return (
+    row.is_group_parent &&
+    row.children?.length === ids.length &&
+    row.children.every(child => ids.includes(child.id))
+  );
+}
+
+// A member belongs to only one group, so its smallest ID identifies the preview.
+export function groupPreviewId(ids: number[]) {
+  return -ids.reduce((smallest, member) => Math.min(smallest, member));
+}
+
 function previewParent(
   group: Group,
   parents: Row[],
@@ -61,11 +74,7 @@ function previewParent(
   baseCurrency?: Row['currency'],
 ): Row | undefined {
   // Keep the real row once Lunch Money has confirmed this membership.
-  const existing = parents.find(
-    row =>
-      row.children?.length === group.ids.length &&
-      row.children.every(child => group.ids.includes(child.id)),
-  );
+  const existing = parents.find(row => hasGroupMembers(row, group.ids));
   if (existing) {
     return existing;
   }
@@ -82,8 +91,7 @@ function previewParent(
     return undefined;
   }
 
-  // Member IDs are unique across groups, so the smallest one gives the preview a stable ID.
-  const id = -group.ids.reduce((smallest, member) => Math.min(smallest, member));
+  const id = groupPreviewId(group.ids);
   return {
     id,
     date: group.date,

@@ -26,6 +26,7 @@ import {
 } from '../data/api';
 import {demoSource} from '../data/demo';
 import {draftChange} from '../data/editChanges';
+import {hasGroupMembers} from '../data/groupProjection';
 import {createSession, message, type Session} from '../data/session';
 import {useEdits} from '../data/useEdits';
 import {useTransactionPages} from '../data/useTransactionPages';
@@ -157,7 +158,8 @@ function Workspace({
   const [budgetOpen, setBudgetOpen] = useState(true);
   const budgetButton = useRef<HTMLButtonElement>(null);
   const commandButton = useRef<HTMLButtonElement>(null);
-  const pendingFocus = useRef<() => HTMLElement | null>(undefined);
+  const pendingFocus = useRef<(rows: Row[]) => HTMLElement | null>(undefined);
+  const restorePaletteOrigin = useRef(true);
   const range = customRange ?? monthRange(month);
   const {
     data: metadata,
@@ -218,8 +220,8 @@ function Workspace({
     }
     const restore = pendingFocus.current;
     pendingFocus.current = undefined;
-    grid.focusTarget(restore());
-  }, [suspended]);
+    grid.focusTarget(restore(visible));
+  }, [suspended, visible]);
   // TODO: Index historical payees per budget and persist the index and sync cursor in IndexedDB.
   const payees = useMemo(
     () => [...new Set(postedRows.map(row => row.payee))].sort(),
@@ -247,6 +249,10 @@ function Workspace({
   }
 
   function open(next: Overlay) {
+    if (!palette) {
+      restorePaletteOrigin.current = true;
+    }
+
     const origin = palette?.origin ?? {
       element:
         document.activeElement instanceof HTMLElement ? document.activeElement : null,
@@ -354,6 +360,19 @@ function Workspace({
     ? groupCommands(selectedRows, edit => {
         if (palette) {
           close();
+        }
+
+        if (edit.group.kind === 'group') {
+          if (palette) {
+            restorePaletteOrigin.current = false;
+          }
+
+          const members = selectedRows.flatMap(row =>
+            row.is_group_parent ? (row.children ?? []).map(child => child.id) : [row.id],
+          );
+          pendingFocus.current = rows =>
+            grid.rowElement(rows.find(row => hasGroupMembers(row, members))?.id) ??
+            restoreFocus();
         }
 
         edits.save(edit);
@@ -966,7 +985,12 @@ function Workspace({
         )}
       </Popover.Root>
       {modal && overlay && (
-        <Modal title={modal.title} close={close} restore={restoreFocus} back={modal.back}>
+        <Modal
+          title={modal.title}
+          close={close}
+          restore={() => (restorePaletteOrigin.current ? restoreFocus() : false)}
+          back={modal.back}
+        >
           <div
             key={
               overlay.kind === 'facet'

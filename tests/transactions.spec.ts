@@ -1629,6 +1629,11 @@ test('groups selected transactions from the palette and restores them with undo'
   await expect(row(page, 2)).toHaveCount(0);
   await expect(page.getByRole('grid').getByText('$14.67', {exact: true})).toBeVisible();
 
+  const group = page.locator('[data-row-id]').filter({
+    has: page.getByText('$14.67', {exact: true}),
+  });
+  await expect(group).toBeFocused();
+
   await page.keyboard.press('ControlOrMeta+z');
   await expect(row(page, 1)).toBeVisible();
   await expect(row(page, 2)).toBeVisible();
@@ -1746,6 +1751,7 @@ test('merges selected groups and individual transactions as one undoable edit', 
 
   const merged = groupWithAmount('$84.45');
   await expect(merged).toContainText('MUD Coffee');
+  await expect(merged).toBeFocused();
   await expect(row(page, 5)).toHaveCount(0);
   for (const group of originals) {
     await expect(group).toHaveCount(0);
