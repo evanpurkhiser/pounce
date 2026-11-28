@@ -43,12 +43,14 @@ test('copy uses the selected or focused transactions and preserves editor copyin
   await page.keyboard.press('ControlOrMeta+c');
   await expect.poll(clipboard).toBe(`${greenmarket}\n\n${omny}`);
 
-  await page.keyboard.press('Escape');
-  await row(page, 2).focus();
-  await page.keyboard.press('N');
-  await expect(row(page, 2).getByRole('textbox', {name: 'Note'})).toBeFocused();
-  await page.keyboard.press('ControlOrMeta+c');
-  await expect.poll(clipboard).toBe('Produce and bread');
+  await test.step('Keep native copy inside an open editor', async () => {
+    await page.keyboard.press('Escape');
+    await row(page, 2).focus();
+    await page.keyboard.press('N');
+    await expect(row(page, 2).getByRole('textbox', {name: 'Note'})).toBeFocused();
+    await page.keyboard.press('ControlOrMeta+c');
+    await expect.poll(clipboard).toBe('Produce and bread');
+  });
 });
 
 test('keyboard range shrinks to its anchor, reverses, and honors filtered select all', async ({
@@ -118,33 +120,37 @@ test('one selected row opens a searchable category dropdown at its cell', async 
 
   const picker = page.getByRole('dialog', {name: 'Change category'});
   const search = picker.getByRole('combobox', {name: 'Search categories'});
-  await expect(search).toBeFocused();
-  await expect(category.getByRole('button')).toHaveAttribute('aria-expanded', 'true');
-  await expect(picker).toBeVisible();
-  const anchor = (await category.boundingBox())!;
-  const popup = (await picker.boundingBox())!;
-  expect(Math.abs(popup.x - anchor.x)).toBeLessThan(2);
-  expect(Math.abs(popup.y - (anchor.y + anchor.height))).toBeLessThan(8);
+  await test.step('Anchor the keyboard-opened picker and restore row focus', async () => {
+    await expect(search).toBeFocused();
+    await expect(category.getByRole('button')).toHaveAttribute('aria-expanded', 'true');
+    await expect(picker).toBeVisible();
+    const anchor = (await category.boundingBox())!;
+    const popup = (await picker.boundingBox())!;
+    expect(Math.abs(popup.x - anchor.x)).toBeLessThan(2);
+    expect(Math.abs(popup.y - (anchor.y + anchor.height))).toBeLessThan(8);
 
-  await page.keyboard.press('Escape');
-  await expect(picker).toBeHidden();
-  await expect(selected).toBeFocused();
-  await expect(selected).toHaveAttribute('aria-selected', 'true');
+    await page.keyboard.press('Escape');
+    await expect(picker).toBeHidden();
+    await expect(selected).toBeFocused();
+    await expect(selected).toHaveAttribute('aria-selected', 'true');
+  });
 
-  await category.getByRole('button').click();
-  await expect(search).toBeFocused();
-  for (const prefix of ['re', 'res']) {
-    await search.fill(prefix);
-    await expect(picker.getByRole('option')).toHaveText(['Dining out']);
-  }
-  await search.fill('resturaunts');
-  await page.keyboard.press('Enter');
-  await expect(picker).toBeHidden();
-  await expect(category).toHaveText('Dining out');
-  await expect(selected).toBeFocused();
-  await expect(row(page, 2).locator('[data-editor-cell=category]')).toHaveText(
-    'Groceries',
-  );
+  await test.step('Search and save through the cell button', async () => {
+    await category.getByRole('button').click();
+    await expect(search).toBeFocused();
+    for (const prefix of ['re', 'res']) {
+      await search.fill(prefix);
+      await expect(picker.getByRole('option')).toHaveText(['Dining out']);
+    }
+    await search.fill('resturaunts');
+    await page.keyboard.press('Enter');
+    await expect(picker).toBeHidden();
+    await expect(category).toHaveText('Dining out');
+    await expect(selected).toBeFocused();
+    await expect(row(page, 2).locator('[data-editor-cell=category]')).toHaveText(
+      'Groceries',
+    );
+  });
 });
 
 test('date and tags open at their cells for a single row', async ({page}) => {
@@ -180,34 +186,36 @@ test('editable cells and selection respond to clicks in the cell padding', async
   await ready(page);
   const target = row(page, 1);
 
-  for (const [field, label] of [
-    ['date', 'Set transaction date'],
-    ['category', 'Change category'],
-    ['tags', 'Set tags'],
-  ]) {
-    const cell = (field === 'tags' ? row(page, 12) : target).locator(
-      `[data-editor-cell="${field}"]`,
-    );
-    await cell.click({position: {x: 2, y: 2}});
-    await expect(dialog(page)).toHaveAccessibleName(label);
-    await page.keyboard.press('Escape');
-  }
+  await test.step('Open editors by clicking cell padding', async () => {
+    for (const [field, label] of [
+      ['date', 'Set transaction date'],
+      ['category', 'Change category'],
+      ['tags', 'Set tags'],
+    ]) {
+      const cell = (field === 'tags' ? row(page, 12) : target).locator(
+        `[data-editor-cell="${field}"]`,
+      );
+      await cell.click({position: {x: 2, y: 2}});
+      await expect(dialog(page)).toHaveAccessibleName(label);
+      await page.keyboard.press('Escape');
+    }
 
-  for (const [field, role, name] of [
-    ['payee', 'combobox', 'Payee'],
-    ['note', 'textbox', 'Note'],
-  ] as const) {
-    const cell = target.locator(`[data-editor-cell="${field}"]`);
-    const bounds = (await cell.boundingBox())!;
-    await cell.click({position: {x: bounds.width - 3, y: bounds.height - 3}});
-    const editor = cell.getByRole(role, {name});
-    await expect(editor).toBeFocused();
-    const editorBounds = (await editor.boundingBox())!;
-    const editingCell = (await cell.boundingBox())!;
-    expect(Math.abs(editorBounds.x - editingCell.x)).toBeLessThan(1);
-    expect(Math.abs(editorBounds.width - editingCell.width)).toBeLessThan(1);
-    await page.keyboard.press('Escape');
-  }
+    for (const [field, role, name] of [
+      ['payee', 'combobox', 'Payee'],
+      ['note', 'textbox', 'Note'],
+    ] as const) {
+      const cell = target.locator(`[data-editor-cell="${field}"]`);
+      const bounds = (await cell.boundingBox())!;
+      await cell.click({position: {x: bounds.width - 3, y: bounds.height - 3}});
+      const editor = cell.getByRole(role, {name});
+      await expect(editor).toBeFocused();
+      const editorBounds = (await editor.boundingBox())!;
+      const editingCell = (await cell.boundingBox())!;
+      expect(Math.abs(editorBounds.x - editingCell.x)).toBeLessThan(1);
+      expect(Math.abs(editorBounds.width - editingCell.width)).toBeLessThan(1);
+      await page.keyboard.press('Escape');
+    }
+  });
 
   const selector = target.locator('[data-editor-cell=selection]');
   await selector.click({position: {x: 2, y: 2}});
@@ -232,19 +240,23 @@ test('the inline note editor grows over the grid without moving rows', async ({p
     }),
   ).toBe('Produce and bread');
   await expect(editor).toHaveCSS('resize', 'none');
-  const singleLine = (await editor.boundingBox())!;
-  await editor.fill('A long note that wraps over multiple lines as it grows. '.repeat(6));
-  const expanded = (await editor.boundingBox())!;
-  const editing = (await target.boundingBox())!;
-  const mark = (await checkbox.boundingBox())!;
+  await test.step('Grow the editor without changing row layout', async () => {
+    const singleLine = (await editor.boundingBox())!;
+    await editor.fill(
+      'A long note that wraps over multiple lines as it grows. '.repeat(6),
+    );
+    const expanded = (await editor.boundingBox())!;
+    const editing = (await target.boundingBox())!;
+    const mark = (await checkbox.boundingBox())!;
 
-  expect(expanded.y).toBe(singleLine.y);
-  expect(expanded.height).toBeGreaterThan(singleLine.height);
-  expect(editing).toEqual(idle);
-  expect(await row(page, 3).boundingBox()).toEqual(next);
-  expect(
-    Math.abs(mark.y + mark.height / 2 - (editing.y + editing.height / 2)),
-  ).toBeLessThan(1);
+    expect(expanded.y).toBe(singleLine.y);
+    expect(expanded.height).toBeGreaterThan(singleLine.height);
+    expect(editing).toEqual(idle);
+    expect(await row(page, 3).boundingBox()).toEqual(next);
+    expect(
+      Math.abs(mark.y + mark.height / 2 - (editing.y + editing.height / 2)),
+    ).toBeLessThan(1);
+  });
 });
 
 test('long transaction text stays on one line in shared column tracks', async ({
@@ -258,23 +270,25 @@ test('long transaction text stays on one line in shared column tracks', async ({
   const height = (await target.boundingBox())!.height;
   const longText = 'A long field value '.repeat(16).trim();
 
-  for (const [key, field, role, label] of [
-    ['P', 'payee', 'combobox', 'Payee'],
-    ['N', 'note', 'textbox', 'Note'],
-  ] as const) {
-    await target.focus();
-    await page.keyboard.press(key);
-    await target.getByRole(role, {name: label}).fill(longText);
-    await page.getByRole('button', {name: /^Commands/}).focus();
+  await test.step('Save long payee and note values with clipping', async () => {
+    for (const [key, field, role, label] of [
+      ['P', 'payee', 'combobox', 'Payee'],
+      ['N', 'note', 'textbox', 'Note'],
+    ] as const) {
+      await target.focus();
+      await page.keyboard.press(key);
+      await target.getByRole(role, {name: label}).fill(longText);
+      await page.getByRole('button', {name: /^Commands/}).focus();
 
-    const text = target.locator(`[data-editor-cell=${field}] button > span`);
-    await expect(text).toHaveText(longText);
-    await expect(text).toHaveCSS('white-space', 'nowrap');
-    await expect(text).toHaveCSS('text-overflow', 'ellipsis');
-    expect(
-      await text.evaluate(element => element.scrollWidth > element.clientWidth),
-    ).toBe(true);
-  }
+      const text = target.locator(`[data-editor-cell=${field}] button > span`);
+      await expect(text).toHaveText(longText);
+      await expect(text).toHaveCSS('white-space', 'nowrap');
+      await expect(text).toHaveCSS('text-overflow', 'ellipsis');
+      expect(
+        await text.evaluate(element => element.scrollWidth > element.clientWidth),
+      ).toBe(true);
+    }
+  });
 
   expect((await grid.boundingBox())!.width).toBe(width);
   expect((await target.boundingBox())!.height).toBe(height);
@@ -310,30 +324,34 @@ test('resizable header handles change the shared column width without sorting', 
   });
   const handle = payee.getByTitle('Resize Payee');
   const cell = row(page, 1).locator('[data-editor-cell=payee]');
-  const {x: left, width: initial} = (await payee.boundingBox())!;
-  const {x, y, width, height} = (await handle.boundingBox())!;
-  const center = x + width / 2;
-  expect(center).toBeCloseTo(left + initial, 0);
-  const start = center + 2;
-  await page.mouse.move(start, y + height / 2);
-  await page.mouse.down();
-  await page.mouse.move(start + 56, y + height / 2, {steps: 5});
-  await page.mouse.up();
+  await test.step('Resize with the pointer and keep the current sort', async () => {
+    const {x: left, width: initial} = (await payee.boundingBox())!;
+    const {x, y, width, height} = (await handle.boundingBox())!;
+    const center = x + width / 2;
+    expect(center).toBeCloseTo(left + initial, 0);
+    const start = center + 2;
+    await page.mouse.move(start, y + height / 2);
+    await page.mouse.down();
+    await page.mouse.move(start + 56, y + height / 2, {steps: 5});
+    await page.mouse.up();
 
-  expect((await payee.boundingBox())!.width).toBeCloseTo(initial + 56, 0);
-  expect(await cell.boundingBox()).toMatchObject({
-    width: (await payee.boundingBox())!.width,
+    expect((await payee.boundingBox())!.width).toBeCloseTo(initial + 56, 0);
+    expect(await cell.boundingBox()).toMatchObject({
+      width: (await payee.boundingBox())!.width,
+    });
+    await expect(
+      headers.getByRole('button', {name: 'Date', exact: true}).locator('..'),
+    ).toHaveAttribute('aria-sort', 'descending');
   });
-  await expect(
-    headers.getByRole('button', {name: 'Date', exact: true}).locator('..'),
-  ).toHaveAttribute('aria-sort', 'descending');
 
-  const resized = (await payee.boundingBox())!.width;
-  const button = payee.getByRole('button', {name: 'Payee', exact: true});
-  await button.focus();
-  await page.keyboard.press('Shift+ArrowLeft');
-  await expect(button).toBeFocused();
-  expect((await payee.boundingBox())!.width).toBeCloseTo(resized - 16, 0);
+  await test.step('Resize with the keyboard and keep header focus', async () => {
+    const resized = (await payee.boundingBox())!.width;
+    const button = payee.getByRole('button', {name: 'Payee', exact: true});
+    await button.focus();
+    await page.keyboard.press('Shift+ArrowLeft');
+    await expect(button).toBeFocused();
+    expect((await payee.boundingBox())!.width).toBeCloseTo(resized - 16, 0);
+  });
 });
 
 test('double-clicking a resize handle fits the widest cell and header', async ({
@@ -358,22 +376,24 @@ test('double-clicking a resize handle fits the widest cell and header', async ({
     true,
   );
 
-  await handle.dblclick();
-  expect(await text.evaluate(element => element.scrollWidth)).toBe(
-    await text.evaluate(element => element.clientWidth),
-  );
-  const fitted = (await header.boundingBox())!.width;
+  await test.step('Fit to content and restore that exact width after resizing', async () => {
+    await handle.dblclick();
+    expect(await text.evaluate(element => element.scrollWidth)).toBe(
+      await text.evaluate(element => element.clientWidth),
+    );
+    const fitted = (await header.boundingBox())!.width;
 
-  const button = header.getByRole('button');
-  await button.focus();
-  await page.keyboard.press('Shift+ArrowRight');
-  expect((await header.boundingBox())!.width).toBeGreaterThan(fitted);
-  await handle.dblclick();
-  expect((await header.boundingBox())!.width).toBe(fitted);
-  await expect(grid.getByRole('columnheader', {name: 'Date'})).toHaveAttribute(
-    'aria-sort',
-    'descending',
-  );
+    const button = header.getByRole('button');
+    await button.focus();
+    await page.keyboard.press('Shift+ArrowRight');
+    expect((await header.boundingBox())!.width).toBeGreaterThan(fitted);
+    await handle.dblclick();
+    expect((await header.boundingBox())!.width).toBe(fitted);
+    await expect(grid.getByRole('columnheader', {name: 'Date'})).toHaveAttribute(
+      'aria-sort',
+      'descending',
+    );
+  });
 });
 
 test('bulk category replaces mixed values with one choice and supports undo and redo', async ({
@@ -438,61 +458,67 @@ test('payee and note drafts save on blur and Escape discards a note draft', asyn
   page,
 }) => {
   await ready(page);
-  await row(page, 1).focus();
-  await page.keyboard.press('P');
-  const payee = page.getByRole('combobox', {name: 'Payee'});
-  await expect(payee).toBeFocused();
-  expect(await payee.evaluate(input => (input as HTMLInputElement).selectionEnd)).toBe(
-    'MUD Coffee'.length,
-  );
-  await page.keyboard.insertText('New merchant');
-  await page.keyboard.press('Tab');
-  await expect(row(page, 1)).toContainText('New merchant');
-  await expect(page.getByRole('button', {name: 'Undo', exact: true})).toBeEnabled();
+  await test.step('Save a changed payee on blur', async () => {
+    await row(page, 1).focus();
+    await page.keyboard.press('P');
+    const payee = page.getByRole('combobox', {name: 'Payee'});
+    await expect(payee).toBeFocused();
+    expect(await payee.evaluate(input => (input as HTMLInputElement).selectionEnd)).toBe(
+      'MUD Coffee'.length,
+    );
+    await page.keyboard.insertText('New merchant');
+    await page.keyboard.press('Tab');
+    await expect(row(page, 1)).toContainText('New merchant');
+    await expect(page.getByRole('button', {name: 'Undo', exact: true})).toBeEnabled();
+  });
 
   await row(page, 1).focus();
   await page.keyboard.press('N');
   const note = row(page, 1)
     .locator('[data-editor-cell=note]')
     .getByRole('textbox', {name: 'Note'});
-  await expect(note).toBeFocused();
-  await note.fill('discard this');
-  await page.keyboard.press('Escape');
-  await expect(note).toHaveCount(0);
-  await expect(row(page, 1)).toBeFocused();
+  await test.step('Discard a note on Escape and save or clear it on blur', async () => {
+    await expect(note).toBeFocused();
+    await note.fill('discard this');
+    await page.keyboard.press('Escape');
+    await expect(note).toHaveCount(0);
+    await expect(row(page, 1)).toBeFocused();
 
-  await page.keyboard.press('N');
-  await expect(note).toHaveValue('');
-  await note.fill('Saved in the grid');
-  const commands = page.getByRole('button', {name: /^Commands/});
-  await commands.focus();
-  await expect(row(page, 1).locator('[data-editor-cell=note]')).toHaveText(
-    'Saved in the grid',
-  );
-  await expect(commands).toBeFocused();
+    await page.keyboard.press('N');
+    await expect(note).toHaveValue('');
+    await note.fill('Saved in the grid');
+    const commands = page.getByRole('button', {name: /^Commands/});
+    await commands.focus();
+    await expect(row(page, 1).locator('[data-editor-cell=note]')).toHaveText(
+      'Saved in the grid',
+    );
+    await expect(commands).toBeFocused();
 
-  await row(page, 1).focus();
-  await page.keyboard.press('N');
-  await expect(note).toHaveValue('Saved in the grid');
-  await note.clear();
-  await page.keyboard.press('Tab');
-  await expect(row(page, 1).locator('[data-editor-cell=note]')).toBeEmpty();
-  await expect(page.getByRole('button', {name: 'Undo', exact: true})).toBeEnabled();
+    await row(page, 1).focus();
+    await page.keyboard.press('N');
+    await expect(note).toHaveValue('Saved in the grid');
+    await note.clear();
+    await page.keyboard.press('Tab');
+    await expect(row(page, 1).locator('[data-editor-cell=note]')).toBeEmpty();
+    await expect(page.getByRole('button', {name: 'Undo', exact: true})).toBeEnabled();
+  });
 
-  await row(page, 1).focus();
-  await page.keyboard.press('X');
-  await page.keyboard.press('J');
-  await page.keyboard.press('X');
-  await page.keyboard.press('P');
-  await expect(dialog(page)).toHaveAccessibleName('Set payee · 2 transactions');
-  await page.keyboard.press('Escape');
-  await page.keyboard.press('N');
-  await expect(dialog(page)).toHaveAccessibleName('Replace notes · 2 transactions');
-  await page.keyboard.press('Escape');
-  await page.keyboard.press('D');
-  await expect(dialog(page)).toHaveAccessibleName(
-    'Set transaction date · 2 transactions',
-  );
+  await test.step('Open bulk editors for selected rows', async () => {
+    await row(page, 1).focus();
+    await page.keyboard.press('X');
+    await page.keyboard.press('J');
+    await page.keyboard.press('X');
+    await page.keyboard.press('P');
+    await expect(dialog(page)).toHaveAccessibleName('Set payee · 2 transactions');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('N');
+    await expect(dialog(page)).toHaveAccessibleName('Replace notes · 2 transactions');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('D');
+    await expect(dialog(page)).toHaveAccessibleName(
+      'Set transaction date · 2 transactions',
+    );
+  });
 });
 
 test('review filter offers the available changes to the current review status', async ({
@@ -507,15 +533,17 @@ test('review filter offers the available changes to the current review status', 
     exact: true,
   });
 
-  await filter.click();
-  await expect(unreviewed.or(reviewed)).toHaveText(['Unreviewed', 'Reviewed']);
-  await expect(anyStatus).toHaveCount(0);
-  await unreviewed.click();
+  await test.step('Choose a status and check the available actions', async () => {
+    await filter.click();
+    await expect(unreviewed.or(reviewed)).toHaveText(['Unreviewed', 'Reviewed']);
+    await expect(anyStatus).toHaveCount(0);
+    await unreviewed.click();
 
-  await filter.click();
-  await expect(unreviewed).toHaveCount(0);
-  await expect(anyStatus).toBeVisible();
-  await reviewed.click();
+    await filter.click();
+    await expect(unreviewed).toHaveCount(0);
+    await expect(anyStatus).toBeVisible();
+    await reviewed.click();
+  });
 
   await filter.click();
   await expect(reviewed).toHaveCount(0);
@@ -530,12 +558,14 @@ test('review filter offers the available changes to the current review status', 
 
 test('month shortcuts and review advance work with row focus', async ({page}) => {
   await ready(page);
-  await page.getByRole('button', {name: 'Filter', exact: true}).click();
-  await dialog(page).getByRole('option', {name: 'Unreviewed', exact: true}).click();
-  await row(page, 1).focus();
-  await page.keyboard.press('R');
-  await expect(row(page, 1)).toHaveCount(0);
-  await expect(row(page, 2)).toBeFocused();
+  await test.step('Advance to the next unreviewed transaction', async () => {
+    await page.getByRole('button', {name: 'Filter', exact: true}).click();
+    await dialog(page).getByRole('option', {name: 'Unreviewed', exact: true}).click();
+    await row(page, 1).focus();
+    await page.keyboard.press('R');
+    await expect(row(page, 1)).toHaveCount(0);
+    await expect(row(page, 2)).toBeFocused();
+  });
   const budget = page.getByRole('button', {name: 'Budget', exact: true});
   await expect(budget).toHaveAttribute('aria-expanded', 'true');
   await page.keyboard.press('Shift+[');
@@ -543,49 +573,55 @@ test('month shortcuts and review advance work with row focus', async ({page}) =>
   await page.keyboard.press('Shift+]');
   await expect(row(page, 2)).toBeVisible();
   await expect(budget).toHaveAttribute('aria-expanded', 'true');
-  await page.keyboard.press('Shift+[');
-  await expect(row(page, 101)).toBeVisible();
-  await page.keyboard.press('G');
-  await page.keyboard.press('M');
-  await expect(dialog(page)).toHaveAccessibleName('Go to month');
-  await dialog(page).getByRole('combobox').fill(currentMonth());
-  await page.keyboard.press('Enter');
-  await expect(row(page, 2)).toBeVisible();
-  await expect(row(page, 1)).toHaveCount(0);
-  await page.keyboard.press('Control+z');
-  await expect(row(page, 1)).toBeVisible();
+  await test.step('Return through the month picker and undo the status change', async () => {
+    await page.keyboard.press('Shift+[');
+    await expect(row(page, 101)).toBeVisible();
+    await page.keyboard.press('G');
+    await page.keyboard.press('M');
+    await expect(dialog(page)).toHaveAccessibleName('Go to month');
+    await dialog(page).getByRole('combobox').fill(currentMonth());
+    await page.keyboard.press('Enter');
+    await expect(row(page, 2)).toBeVisible();
+    await expect(row(page, 1)).toHaveCount(0);
+    await page.keyboard.press('Control+z');
+    await expect(row(page, 1)).toBeVisible();
+  });
 });
 
 test('bulk date change moves across months and can be undone from another month', async ({
   page,
 }) => {
-  await ready(page);
-  await row(page, 1).focus();
-  await page.keyboard.press('X');
-  await page.keyboard.press('J');
-  await page.keyboard.press('X');
-  await page.keyboard.press('D');
-  const next = shiftMonth(currentMonth(), -1);
-  const [year, month] = next.split('-');
-  await dialog(page).getByRole('spinbutton', {name: /month/i}).press(month[0]);
-  await page.keyboard.press(month[1]);
-  await dialog(page).getByRole('spinbutton', {name: /day/i}).press('1');
-  const yearInput = dialog(page).getByRole('spinbutton', {name: /year/i});
-  await yearInput.focus();
-  for (const digit of year) {
-    await page.keyboard.press(digit);
-  }
-  await dialog(page).getByRole('button', {name: 'Apply date'}).click();
-  await expect(row(page, 1)).toHaveCount(0);
-  await expect(row(page, 2)).toHaveCount(0);
-  await page.getByRole('button', {name: 'Previous month'}).click();
-  await expect(row(page, 1)).toBeVisible();
-  await expect(page.getByRole('button', {name: 'Undo', exact: true})).toBeEnabled();
-  await page.keyboard.press('Control+z');
-  await expect(row(page, 1)).toHaveCount(0);
-  await expect(page.getByRole('button', {name: 'Redo', exact: true})).toBeEnabled();
-  await page.keyboard.press('Control+Shift+z');
-  await expect(row(page, 1)).toBeVisible();
+  await test.step('Move two transactions into the previous month', async () => {
+    await ready(page);
+    await row(page, 1).focus();
+    await page.keyboard.press('X');
+    await page.keyboard.press('J');
+    await page.keyboard.press('X');
+    await page.keyboard.press('D');
+    const next = shiftMonth(currentMonth(), -1);
+    const [year, month] = next.split('-');
+    await dialog(page).getByRole('spinbutton', {name: /month/i}).press(month[0]);
+    await page.keyboard.press(month[1]);
+    await dialog(page).getByRole('spinbutton', {name: /day/i}).press('1');
+    const yearInput = dialog(page).getByRole('spinbutton', {name: /year/i});
+    await yearInput.focus();
+    for (const digit of year) {
+      await page.keyboard.press(digit);
+    }
+    await dialog(page).getByRole('button', {name: 'Apply date'}).click();
+    await expect(row(page, 1)).toHaveCount(0);
+    await expect(row(page, 2)).toHaveCount(0);
+  });
+  await test.step('Undo and redo while viewing that month', async () => {
+    await page.getByRole('button', {name: 'Previous month'}).click();
+    await expect(row(page, 1)).toBeVisible();
+    await expect(page.getByRole('button', {name: 'Undo', exact: true})).toBeEnabled();
+    await page.keyboard.press('Control+z');
+    await expect(row(page, 1)).toHaveCount(0);
+    await expect(page.getByRole('button', {name: 'Redo', exact: true})).toBeEnabled();
+    await page.keyboard.press('Control+Shift+z');
+    await expect(row(page, 1)).toBeVisible();
+  });
 });
 
 for (const {platform, userAgent, modifier, command, redo, clear, toggle, reset} of [
@@ -651,39 +687,43 @@ test('shortcut overlay restores focus and filter modifier adds a second category
   page,
 }) => {
   await ready(page);
-  await row(page, 1).focus();
-  await page.keyboard.press('Shift+/');
-  await expect(dialog(page)).toHaveAccessibleName('Keyboard shortcuts');
-  await expect(
-    dialog(page).getByRole('button', {name: 'Close'}).locator('kbd'),
-  ).toBeVisible();
-  const displayed = dialog(page).locator('kbd [aria-hidden="true"]');
-  for (const label of ['←', '→', 'G G']) {
-    await expect(displayed.filter({hasText: new RegExp(`^${label}$`)})).toBeVisible();
-  }
-  for (const label of ['Shift+Up Arrow', 'Shift+Down Arrow', 'G, then G']) {
-    await expect(dialog(page).locator('kbd').filter({hasText: label})).toBeVisible();
-  }
-  await page.keyboard.press('Escape');
-  await expect(row(page, 1)).toBeFocused();
+  await test.step('Open shortcut help and restore row focus', async () => {
+    await row(page, 1).focus();
+    await page.keyboard.press('Shift+/');
+    await expect(dialog(page)).toHaveAccessibleName('Keyboard shortcuts');
+    await expect(
+      dialog(page).getByRole('button', {name: 'Close'}).locator('kbd'),
+    ).toBeVisible();
+    const displayed = dialog(page).locator('kbd [aria-hidden="true"]');
+    for (const label of ['←', '→', 'G G']) {
+      await expect(displayed.filter({hasText: new RegExp(`^${label}$`)})).toBeVisible();
+    }
+    for (const label of ['Shift+Up Arrow', 'Shift+Down Arrow', 'G, then G']) {
+      await expect(dialog(page).locator('kbd').filter({hasText: label})).toBeVisible();
+    }
+    await page.keyboard.press('Escape');
+    await expect(row(page, 1)).toBeFocused();
+  });
 
-  await page.getByRole('button', {name: 'Filter', exact: true}).click();
-  await dialog(page).getByRole('option', {name: 'Category', exact: true}).click();
-  const search = dialog(page).getByRole('combobox');
-  await search.fill('groceries');
-  const groceries = dialog(page).getByRole('option', {name: 'Groceries', exact: true});
-  await expect(groceries.locator('svg.lucide-square')).toBeVisible();
-  await page.keyboard.press('Control+Enter');
-  await expect(groceries.locator('svg.lucide-square-check-big')).toBeVisible();
-  await expect(
-    page.getByRole('button', {name: 'Remove filter Groceries', includeHidden: true}),
-  ).toBeAttached();
-  await search.fill('transportation');
-  await page.keyboard.press('Control+Enter');
-  await dialog(page).getByRole('button', {name: 'Done'}).click();
-  await expect(row(page, 2)).toBeVisible();
-  await expect(row(page, 3)).toBeVisible();
-  await expect(row(page, 1)).toHaveCount(0);
+  await test.step('Add a second filter value with the modifier key', async () => {
+    await page.getByRole('button', {name: 'Filter', exact: true}).click();
+    await dialog(page).getByRole('option', {name: 'Category', exact: true}).click();
+    const search = dialog(page).getByRole('combobox');
+    await search.fill('groceries');
+    const groceries = dialog(page).getByRole('option', {name: 'Groceries', exact: true});
+    await expect(groceries.locator('svg.lucide-square')).toBeVisible();
+    await page.keyboard.press('Control+Enter');
+    await expect(groceries.locator('svg.lucide-square-check-big')).toBeVisible();
+    await expect(
+      page.getByRole('button', {name: 'Remove filter Groceries', includeHidden: true}),
+    ).toBeAttached();
+    await search.fill('transportation');
+    await page.keyboard.press('Control+Enter');
+    await dialog(page).getByRole('button', {name: 'Done'}).click();
+    await expect(row(page, 2)).toBeVisible();
+    await expect(row(page, 3)).toBeVisible();
+    await expect(row(page, 1)).toHaveCount(0);
+  });
 });
 
 test('column headers and the sort submenu share order and preserve selection', async ({
@@ -695,62 +735,70 @@ test('column headers and the sort submenu share order and preserve selection', a
   const amount = page.getByRole('columnheader', {name: 'Amount', exact: true});
   const review = page.getByRole('columnheader', {name: 'Review', exact: true});
   const displayed = page.locator('tbody tr[data-row-id]');
-  await expect(headers).toHaveCount(8);
-  await expect(
-    headers.first().getByRole('checkbox', {name: 'Select all visible transactions'}),
-  ).toBeVisible();
-  await expect(headers.filter({has: page.getByRole('button')})).toHaveText([
-    'Date↓',
-    'Category↕',
-    'Payee↕',
-    'Amount↕',
-    'Note↕',
-    'Tags↕',
-    'Review',
-  ]);
-  await expect(date).toHaveAttribute('aria-sort', 'descending');
-  await expect(review.locator('svg.lucide-check')).toBeVisible();
-  await expect(
-    row(page, 1).getByRole('img', {name: 'Unreviewed'}).locator('svg.lucide-circle'),
-  ).toBeVisible();
+  await test.step('Show the sortable headers and initial review state', async () => {
+    await expect(headers).toHaveCount(8);
+    await expect(
+      headers.first().getByRole('checkbox', {name: 'Select all visible transactions'}),
+    ).toBeVisible();
+    await expect(headers.filter({has: page.getByRole('button')})).toHaveText([
+      'Date↓',
+      'Category↕',
+      'Payee↕',
+      'Amount↕',
+      'Note↕',
+      'Tags↕',
+      'Review',
+    ]);
+    await expect(date).toHaveAttribute('aria-sort', 'descending');
+    await expect(review.locator('svg.lucide-check')).toBeVisible();
+    await expect(
+      row(page, 1).getByRole('img', {name: 'Unreviewed'}).locator('svg.lucide-circle'),
+    ).toBeVisible();
+  });
 
-  await row(page, 1).focus();
-  await page.keyboard.press('X');
-  await amount.click();
-  await expect(amount).toHaveAttribute('aria-sort', 'ascending');
-  await expect(displayed.first()).toHaveAttribute('data-row-id', '1');
-  await amount.click();
-  await expect(amount).toHaveAttribute('aria-sort', 'descending');
-  await expect(displayed.first()).toHaveAttribute('data-row-id', '12');
+  await test.step('Sort the selected row by amount', async () => {
+    await row(page, 1).focus();
+    await page.keyboard.press('X');
+    await amount.click();
+    await expect(amount).toHaveAttribute('aria-sort', 'ascending');
+    await expect(displayed.first()).toHaveAttribute('data-row-id', '1');
+    await amount.click();
+    await expect(amount).toHaveAttribute('aria-sort', 'descending');
+    await expect(displayed.first()).toHaveAttribute('data-row-id', '12');
+  });
 
-  await row(page, 1).focus();
-  await page.keyboard.press('S');
-  await expect(dialog(page)).toHaveAccessibleName('Sort by');
-  await dialog(page).getByRole('combobox').fill('date');
-  await dialog(page).getByRole('option', {name: 'Date Newest first'}).click();
-  await expect(date).toHaveAttribute('aria-sort', 'descending');
-  await expect(displayed.first()).toHaveAttribute('data-row-id', '1');
-  await expect(row(page, 1)).toBeFocused();
-  await expect(row(page, 1)).toHaveAttribute('aria-selected', 'true');
+  await test.step('Sort through the submenu and keep the selection', async () => {
+    await row(page, 1).focus();
+    await page.keyboard.press('S');
+    await expect(dialog(page)).toHaveAccessibleName('Sort by');
+    await dialog(page).getByRole('combobox').fill('date');
+    await dialog(page).getByRole('option', {name: 'Date Newest first'}).click();
+    await expect(date).toHaveAttribute('aria-sort', 'descending');
+    await expect(displayed.first()).toHaveAttribute('data-row-id', '1');
+    await expect(row(page, 1)).toBeFocused();
+    await expect(row(page, 1)).toHaveAttribute('aria-selected', 'true');
+  });
 
-  await amount.click();
-  await expect(amount).toHaveAttribute('aria-sort', 'ascending');
-  await date.click();
-  await expect(date).toHaveAttribute('aria-sort', 'descending');
-  await page.keyboard.press('Control+k');
-  await dialog(page)
-    .getByRole('option', {name: /^Sort by/})
-    .click();
-  await dialog(page).getByRole('option', {name: 'Date Oldest first'}).click();
-  await expect(date).toHaveAttribute('aria-sort', 'ascending');
-  await expect(displayed.first()).toHaveAttribute('data-row-id', '12');
-  await expect(
-    row(page, 9).getByRole('img', {name: 'Reviewed', exact: true}),
-  ).toHaveAttribute('data-reviewed', 'true');
-  await review.click();
-  await expect(review).toHaveAttribute('aria-sort', 'ascending');
-  await review.click();
-  await expect(review).toHaveAttribute('aria-sort', 'descending');
+  await test.step('Switch between date and review sorting', async () => {
+    await amount.click();
+    await expect(amount).toHaveAttribute('aria-sort', 'ascending');
+    await date.click();
+    await expect(date).toHaveAttribute('aria-sort', 'descending');
+    await page.keyboard.press('Control+k');
+    await dialog(page)
+      .getByRole('option', {name: /^Sort by/})
+      .click();
+    await dialog(page).getByRole('option', {name: 'Date Oldest first'}).click();
+    await expect(date).toHaveAttribute('aria-sort', 'ascending');
+    await expect(displayed.first()).toHaveAttribute('data-row-id', '12');
+    await expect(
+      row(page, 9).getByRole('img', {name: 'Reviewed', exact: true}),
+    ).toHaveAttribute('data-reviewed', 'true');
+    await review.click();
+    await expect(review).toHaveAttribute('aria-sort', 'ascending');
+    await review.click();
+    await expect(review).toHaveAttribute('aria-sort', 'descending');
+  });
 });
 
 test('clicking away saves the payee and leaves focus at its destination', async ({
@@ -759,16 +807,18 @@ test('clicking away saves the payee and leaves focus at its destination', async 
   await ready(page);
   const payee = page.getByRole('combobox', {name: 'Payee'});
   const commands = page.getByRole('button', {name: /^Commands/});
-  await row(page, 1).focus();
-  await page.keyboard.press('P');
-  await payee.fill('New payee on click');
-  await commands.click();
-  await expect(dialog(page)).toHaveAccessibleName('Commands');
-  await page.keyboard.press('Escape');
-  await expect(commands).toBeFocused();
-  await expect(payee).toHaveCount(0);
-  await expect(row(page, 1)).toContainText('New payee on click');
-  await expect(page.getByRole('button', {name: 'Undo', exact: true})).toBeEnabled();
+  await test.step('Save the payee when opening commands', async () => {
+    await row(page, 1).focus();
+    await page.keyboard.press('P');
+    await payee.fill('New payee on click');
+    await commands.click();
+    await expect(dialog(page)).toHaveAccessibleName('Commands');
+    await page.keyboard.press('Escape');
+    await expect(commands).toBeFocused();
+    await expect(payee).toHaveCount(0);
+    await expect(row(page, 1)).toContainText('New payee on click');
+    await expect(page.getByRole('button', {name: 'Undo', exact: true})).toBeEnabled();
+  });
 
   await row(page, 1).focus();
   await page.keyboard.press('P');
@@ -857,53 +907,61 @@ test('grid has one tab stop and preserves row and cell focus through keyboard na
 }) => {
   await ready(page);
   const grid = page.getByRole('grid', {name: 'Transactions'});
-  await page.getByRole('button', {name: 'Search', exact: true}).focus();
-  await page.keyboard.press('Tab');
-  await expect(page.getByRole('button', {name: 'Budget', exact: true})).toBeFocused();
-  await page.keyboard.press('Tab');
-  await expect(row(page, 1)).toBeFocused();
+  await test.step('Navigate from the toolbar into grid cells', async () => {
+    await page.getByRole('button', {name: 'Search', exact: true}).focus();
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('button', {name: 'Budget', exact: true})).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(row(page, 1)).toBeFocused();
 
-  await page.keyboard.press('ArrowRight');
-  await expect(row(page, 1).getByRole('checkbox')).toBeFocused();
-  await page.keyboard.press('ArrowRight');
-  await expect(row(page, 1).getByRole('button', {name: /Change date/})).toBeFocused();
-  await page.keyboard.press('ArrowDown');
-  await expect(row(page, 2).getByRole('button', {name: /Change date/})).toBeFocused();
-  await page.keyboard.press('Escape');
-  await expect(row(page, 2)).toBeFocused();
+    await page.keyboard.press('ArrowRight');
+    await expect(row(page, 1).getByRole('checkbox')).toBeFocused();
+    await page.keyboard.press('ArrowRight');
+    await expect(row(page, 1).getByRole('button', {name: /Change date/})).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(row(page, 2).getByRole('button', {name: /Change date/})).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(row(page, 2)).toBeFocused();
+  });
 
   const second = row(page, 2);
   const checkbox = second.getByRole('checkbox');
   const date = second.getByRole('button', {name: /Change date/});
   const review = second.locator('[data-editor-cell="review"]');
 
-  await page.keyboard.press('Tab');
-  await expect(checkbox).toBeFocused();
-  await page.keyboard.press('Tab');
-  await expect(date).toBeFocused();
-  await page.keyboard.press('Shift+Tab');
-  await expect(checkbox).toBeFocused();
-  await page.keyboard.press('Shift+Tab');
-  await expect(page.getByRole('button', {name: 'Budget', exact: true})).toBeFocused();
+  await test.step('Tab through controls and leave the grid', async () => {
+    await page.keyboard.press('Tab');
+    await expect(checkbox).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(date).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    await expect(checkbox).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    await expect(page.getByRole('button', {name: 'Budget', exact: true})).toBeFocused();
+  });
 
-  await page.keyboard.press('Tab');
-  await expect(checkbox).toBeFocused();
-  await page.keyboard.press('Escape');
-  await expect(second).toBeFocused();
-  await page.keyboard.press('Shift+Tab');
-  await expect(review).toBeFocused();
-  await page.keyboard.press('Tab');
-  await expect(grid.locator(':focus')).toHaveCount(0);
-  await page.keyboard.press('Shift+Tab');
-  await expect(review).toBeFocused();
-  await expect(grid.locator('[tabindex="0"]')).toHaveCount(1);
+  await test.step('Restore cell focus with one grid tab stop', async () => {
+    await page.keyboard.press('Tab');
+    await expect(checkbox).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(second).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    await expect(review).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(grid.locator(':focus')).toHaveCount(0);
+    await page.keyboard.press('Shift+Tab');
+    await expect(review).toBeFocused();
+    await expect(grid.locator('[tabindex="0"]')).toHaveCount(1);
+  });
 
-  await row(page, 2).getByRole('checkbox').click();
-  await row(page, 4)
-    .getByRole('checkbox')
-    .click({modifiers: ['Shift']});
-  await expect(selection(page)).toHaveCount(3);
-  await expect(row(page, 3)).toHaveAttribute('aria-selected', 'true');
+  await test.step('Extend selection by shift-clicking checkboxes', async () => {
+    await row(page, 2).getByRole('checkbox').click();
+    await row(page, 4)
+      .getByRole('checkbox')
+      .click({modifiers: ['Shift']});
+    await expect(selection(page)).toHaveCount(3);
+    await expect(row(page, 3)).toHaveAttribute('aria-selected', 'true');
+  });
 });
 
 test('J and K preserve cell focus and Escape clears selection before focus', async ({
@@ -924,15 +982,17 @@ test('J and K preserve cell focus and Escape clears selection before focus', asy
   await expect(date(3)).toBeFocused();
   await expect(selection(page)).toHaveCount(2);
 
-  await page.keyboard.press('Escape');
-  await expect(selection(page)).toHaveCount(0);
-  await expect(date(3)).toBeFocused();
-  await page.keyboard.press('Escape');
-  await expect(row(page, 3)).toBeFocused();
-  await page.keyboard.press('Escape');
-  await expect(
-    page.getByRole('grid', {name: 'Transactions'}).locator(':focus'),
-  ).toHaveCount(0);
+  await test.step('Clear selection, then cell focus, then grid focus', async () => {
+    await page.keyboard.press('Escape');
+    await expect(selection(page)).toHaveCount(0);
+    await expect(date(3)).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(row(page, 3)).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(
+      page.getByRole('grid', {name: 'Transactions'}).locator(':focus'),
+    ).toHaveCount(0);
+  });
 });
 
 test('G G and Shift+G jump to the first and last row while preserving column focus and selection', async ({
@@ -1033,35 +1093,39 @@ test('focused cells offer contextual commands and picker dismissal restores shor
   await expect(target).toBeFocused();
   await page.keyboard.press('Home');
   await expect(row(page, 1).getByRole('checkbox')).toBeFocused();
-  await page.keyboard.press('Control+k');
-  for (const name of [
-    /Change category/,
-    /Edit payee/,
-    /Set transaction date/,
-    /Set note/,
-    /Set tags/,
-    /Mark reviewed/,
-  ]) {
-    await expect(dialog(page).getByRole('option', {name})).toBeVisible();
-  }
-  await dialog(page)
-    .getByRole('option', {name: /Set note/})
-    .click();
-  await expect(dialog(page).getByRole('textbox', {name: 'Note'})).toBeFocused();
-  await page.keyboard.press('Escape');
-  await expect(target.getByRole('checkbox')).toBeFocused();
-
-  for (const [key, title] of [
-    ['C', 'Change category'],
-    ['T', 'Set tags'],
-    ['C', 'Change category'],
-  ]) {
-    await page.keyboard.press(key);
-    await expect(dialog(page)).toHaveAccessibleName(title);
+  await test.step('Offer contextual commands and restore the focused control', async () => {
+    await page.keyboard.press('Control+k');
+    for (const name of [
+      /Change category/,
+      /Edit payee/,
+      /Set transaction date/,
+      /Set note/,
+      /Set tags/,
+      /Mark reviewed/,
+    ]) {
+      await expect(dialog(page).getByRole('option', {name})).toBeVisible();
+    }
+    await dialog(page)
+      .getByRole('option', {name: /Set note/})
+      .click();
+    await expect(dialog(page).getByRole('textbox', {name: 'Note'})).toBeFocused();
     await page.keyboard.press('Escape');
-  }
-  await expect(row(page, 1)).toBeFocused();
-  await expect(page.getByRole('button', {name: 'Undo', exact: true})).toHaveCount(0);
+    await expect(target.getByRole('checkbox')).toBeFocused();
+  });
+
+  await test.step('Keep editing shortcuts available after dismissal', async () => {
+    for (const [key, title] of [
+      ['C', 'Change category'],
+      ['T', 'Set tags'],
+      ['C', 'Change category'],
+    ]) {
+      await page.keyboard.press(key);
+      await expect(dialog(page)).toHaveAccessibleName(title);
+      await page.keyboard.press('Escape');
+    }
+    await expect(row(page, 1)).toBeFocused();
+    await expect(page.getByRole('button', {name: 'Undo', exact: true})).toHaveCount(0);
+  });
 });
 
 test('filter and sort changes are shareable and follow browser history', async ({
@@ -1080,17 +1144,19 @@ test('filter and sort changes are shareable and follow browser history', async (
   await expect(reviewedChip).toBeVisible();
   await expect(row(page, 1)).toHaveCount(0);
 
-  await page.goBack();
-  await expect(page).toHaveURL(url => !url.searchParams.has('review'));
-  await expect(row(page, 1)).toBeVisible();
-  await expect(amount).toHaveAttribute('aria-sort', 'ascending');
-  await page.goForward();
-  await expect(reviewedChip).toBeVisible();
-  await page.reload();
-  await expect(reviewedChip).toBeVisible();
-  await expect(amount).toHaveAttribute('aria-sort', 'ascending');
-  await expect(row(page, 9)).toBeVisible();
-  await expect(row(page, 1)).toHaveCount(0);
+  await test.step('Restore filters and sorting through history and reload', async () => {
+    await page.goBack();
+    await expect(page).toHaveURL(url => !url.searchParams.has('review'));
+    await expect(row(page, 1)).toBeVisible();
+    await expect(amount).toHaveAttribute('aria-sort', 'ascending');
+    await page.goForward();
+    await expect(reviewedChip).toBeVisible();
+    await page.reload();
+    await expect(reviewedChip).toBeVisible();
+    await expect(amount).toHaveAttribute('aria-sort', 'ascending');
+    await expect(row(page, 9)).toBeVisible();
+    await expect(row(page, 1)).toHaveCount(0);
+  });
 });
 
 test('history navigation clears an editor when its transaction leaves the view', async ({
@@ -1147,45 +1213,57 @@ test('F opens filters, Ctrl+F clears facets and search, and G T returns to this 
   page,
 }) => {
   await ready(page);
-  await page.keyboard.press('F');
-  await expect(dialog(page)).toHaveAccessibleName('Filter');
-  await dialog(page).getByRole('option', {name: 'Tag', exact: true}).click();
-  await expect(dialog(page).getByRole('option')).toHaveText(['Shared', 'Travel', 'Work']);
-  const travel = dialog(page).getByRole('option', {name: 'Travel'});
-  await expect(travel.getByTitle('Travel')).toBeVisible();
-  await travel.click();
-  await expect(page.getByRole('button', {name: 'Remove filter Travel'})).toBeVisible();
+  await test.step('Open the tag filter and apply it', async () => {
+    await page.keyboard.press('F');
+    await expect(dialog(page)).toHaveAccessibleName('Filter');
+    await dialog(page).getByRole('option', {name: 'Tag', exact: true}).click();
+    await expect(dialog(page).getByRole('option')).toHaveText([
+      'Shared',
+      'Travel',
+      'Work',
+    ]);
+    const travel = dialog(page).getByRole('option', {name: 'Travel'});
+    await expect(travel.getByTitle('Travel')).toBeVisible();
+    await travel.click();
+    await expect(page.getByRole('button', {name: 'Remove filter Travel'})).toBeVisible();
+  });
 
   const search = page.getByRole('button', {name: 'Search', exact: true});
-  await search.click();
-  await expect(dialog(page)).toHaveAccessibleName('Search');
-  await dialog(page).getByRole('textbox').fill('MUD Coffee');
-  await dialog(page).getByRole('button', {name: 'Show results'}).click();
-  await expect(page.getByRole('button', {name: 'Clear search'})).toBeVisible();
-  await page.keyboard.press('Control+F');
-  await expect(page.getByRole('button', {name: 'Clear search'})).toHaveCount(0);
-  await expect(page.getByRole('button', {name: 'Remove filter Travel'})).toHaveCount(0);
-  await expect(page.locator('[data-row-id]')).toHaveCount(11);
+  await test.step('Clear facets and search with the shortcut', async () => {
+    await search.click();
+    await expect(dialog(page)).toHaveAccessibleName('Search');
+    await dialog(page).getByRole('textbox').fill('MUD Coffee');
+    await dialog(page).getByRole('button', {name: 'Show results'}).click();
+    await expect(page.getByRole('button', {name: 'Clear search'})).toBeVisible();
+    await page.keyboard.press('Control+F');
+    await expect(page.getByRole('button', {name: 'Clear search'})).toHaveCount(0);
+    await expect(page.getByRole('button', {name: 'Remove filter Travel'})).toHaveCount(0);
+    await expect(page.locator('[data-row-id]')).toHaveCount(11);
+  });
 
-  await search.click();
-  await dialog(page).getByRole('textbox').fill('MUD Coffee');
-  await dialog(page).getByRole('button', {name: 'Show results'}).click();
-  await page.keyboard.press('Control+k');
-  const clearFilters = dialog(page).getByRole('option', {name: /Clear filters/});
-  await expect(clearFilters).toHaveAccessibleName('Clear filters Control+F');
-  await expect(clearFilters.locator('kbd [aria-hidden="true"]')).toHaveText(
-    /^(Ctrl\+|⌃ )F$/,
-  );
-  await clearFilters.click();
-  await expect(page.getByRole('button', {name: 'Clear search'})).toHaveCount(0);
+  await test.step('Clear a search with the command picker', async () => {
+    await search.click();
+    await dialog(page).getByRole('textbox').fill('MUD Coffee');
+    await dialog(page).getByRole('button', {name: 'Show results'}).click();
+    await page.keyboard.press('Control+k');
+    const clearFilters = dialog(page).getByRole('option', {name: /Clear filters/});
+    await expect(clearFilters).toHaveAccessibleName('Clear filters Control+F');
+    await expect(clearFilters.locator('kbd [aria-hidden="true"]')).toHaveText(
+      /^(Ctrl\+|⌃ )F$/,
+    );
+    await clearFilters.click();
+    await expect(page.getByRole('button', {name: 'Clear search'})).toHaveCount(0);
+  });
 
-  await page.getByRole('button', {name: 'Previous month'}).click();
-  await expect(row(page, 101)).toBeVisible();
-  await row(page, 101).focus();
-  await page.keyboard.press('G');
-  await page.keyboard.press('T');
-  await expect(row(page, 1)).toBeVisible();
-  await expect(dialog(page)).toHaveCount(0);
+  await test.step('Jump back to the current month', async () => {
+    await page.getByRole('button', {name: 'Previous month'}).click();
+    await expect(row(page, 101)).toBeVisible();
+    await row(page, 101).focus();
+    await page.keyboard.press('G');
+    await page.keyboard.press('T');
+    await expect(row(page, 1)).toBeVisible();
+    await expect(dialog(page)).toHaveCount(0);
+  });
 });
 
 test('Control shortcuts navigate commands and nested picker results', async ({page}) => {
@@ -1230,72 +1308,86 @@ test('command search shows category values only within the filter scope', async 
   await ready(page);
   await page.keyboard.press('Control+k');
   const search = dialog(page).getByRole('combobox');
-  await search.fill('Groceries');
-  await expect(dialog(page).getByRole('option', {name: /Groceries/})).toHaveCount(0);
-  await search.fill('Category');
-  const category = dialog(page).getByRole('option', {
-    name: 'Filter › Category',
-    exact: true,
+  await test.step('Offer category values in category scope and apply a group', async () => {
+    await search.fill('Groceries');
+    await expect(dialog(page).getByRole('option', {name: /Groceries/})).toHaveCount(0);
+    await search.fill('Category');
+    const category = dialog(page).getByRole('option', {
+      name: 'Filter › Category',
+      exact: true,
+    });
+    await expect(category.locator('svg')).toBeVisible();
+    await category.click();
+    await expect(dialog(page)).toHaveAccessibleName('Filter by category');
+    const food = dialog(page).getByRole('group', {name: 'Food', exact: true});
+    await expect(
+      food.getByRole('option', {name: 'Groceries', exact: true}),
+    ).toBeVisible();
+    const wholeFoodGroup = food.getByRole('option').first();
+    await expect(wholeFoodGroup).toHaveAccessibleName('Food All in group');
+    await expect(
+      dialog(page).getByRole('option', {name: 'Transportation', exact: true}),
+    ).toBeVisible();
+    await wholeFoodGroup.click();
+    await expect(row(page, 2)).toBeVisible();
+    await expect(row(page, 5)).toBeVisible();
+    await expect(row(page, 3)).toHaveCount(0);
+    await page.getByRole('button', {name: 'Remove filter Food', exact: true}).click();
   });
-  await expect(category.locator('svg')).toBeVisible();
-  await category.click();
-  await expect(dialog(page)).toHaveAccessibleName('Filter by category');
-  const food = dialog(page).getByRole('group', {name: 'Food', exact: true});
-  await expect(food.getByRole('option', {name: 'Groceries', exact: true})).toBeVisible();
-  const wholeFoodGroup = food.getByRole('option').first();
-  await expect(wholeFoodGroup).toHaveAccessibleName('Food All in group');
-  await expect(
-    dialog(page).getByRole('option', {name: 'Transportation', exact: true}),
-  ).toBeVisible();
-  await wholeFoodGroup.click();
-  await expect(row(page, 2)).toBeVisible();
-  await expect(row(page, 5)).toBeVisible();
-  await expect(row(page, 3)).toHaveCount(0);
-  await page.getByRole('button', {name: 'Remove filter Food', exact: true}).click();
 
-  await page.keyboard.press('F');
-  await expect(dialog(page)).toHaveAccessibleName('Filter');
-  const filterCategory = dialog(page).getByRole('option', {
-    name: 'Category',
-    exact: true,
+  await test.step('Render comparable category and review icons', async () => {
+    await page.keyboard.press('F');
+    await expect(dialog(page)).toHaveAccessibleName('Filter');
+    const filterCategory = dialog(page).getByRole('option', {
+      name: 'Category',
+      exact: true,
+    });
+    const reviewed = dialog(page).getByRole('option', {name: 'Reviewed', exact: true});
+    const unreviewed = dialog(page).getByRole('option', {
+      name: 'Unreviewed',
+      exact: true,
+    });
+    const reviewedIcon = reviewed.locator('svg.lucide-circle-check');
+    const unreviewedIcon = unreviewed.locator('svg.lucide-circle');
+    await expect(reviewedIcon).toBeVisible();
+    await expect(unreviewedIcon).toBeVisible();
+    const [categoryIconBounds, reviewedIconBounds, unreviewedIconBounds] =
+      await Promise.all(
+        [filterCategory.locator('svg'), reviewedIcon, unreviewedIcon].map(icon =>
+          icon.boundingBox(),
+        ),
+      );
+    expect(reviewedIconBounds?.width).toBe(categoryIconBounds?.width);
+    expect(unreviewedIconBounds?.width).toBe(categoryIconBounds?.width);
   });
-  const reviewed = dialog(page).getByRole('option', {name: 'Reviewed', exact: true});
-  const unreviewed = dialog(page).getByRole('option', {name: 'Unreviewed', exact: true});
-  const reviewedIcon = reviewed.locator('svg.lucide-circle-check');
-  const unreviewedIcon = unreviewed.locator('svg.lucide-circle');
-  await expect(reviewedIcon).toBeVisible();
-  await expect(unreviewedIcon).toBeVisible();
-  const [categoryIconBounds, reviewedIconBounds, unreviewedIconBounds] =
-    await Promise.all(
-      [filterCategory.locator('svg'), reviewedIcon, unreviewedIcon].map(icon =>
-        icon.boundingBox(),
-      ),
+  await test.step('Toggle a category with the modifier and replace it with Enter', async () => {
+    await search.fill('Groceries');
+    const groceries = dialog(page).getByRole('option', {
+      name: 'Category › Food › Groceries',
+      exact: true,
+    });
+    await expect(groceries).toBeVisible();
+    await page.keyboard.press('Control+Enter');
+    await expect(groceries).toHaveAccessibleDescription('Filter active');
+    await expect(
+      page.getByRole('button', {name: 'Remove filter Groceries', includeHidden: true}),
+    ).toBeAttached();
+
+    await search.fill('Dining out');
+    await expect(
+      dialog(page).getByRole('option', {
+        name: 'Category › Food › Dining out',
+        exact: true,
+      }),
+    ).toBeVisible();
+    await page.keyboard.press('Enter');
+    await expect(
+      page.getByRole('button', {name: 'Remove filter Dining out'}),
+    ).toBeVisible();
+    await expect(page.getByRole('button', {name: 'Remove filter Groceries'})).toHaveCount(
+      0,
     );
-  expect(reviewedIconBounds?.width).toBe(categoryIconBounds?.width);
-  expect(unreviewedIconBounds?.width).toBe(categoryIconBounds?.width);
-  await search.fill('Groceries');
-  const groceries = dialog(page).getByRole('option', {
-    name: 'Category › Food › Groceries',
-    exact: true,
   });
-  await expect(groceries).toBeVisible();
-  await page.keyboard.press('Control+Enter');
-  await expect(groceries).toHaveAccessibleDescription('Filter active');
-  await expect(
-    page.getByRole('button', {name: 'Remove filter Groceries', includeHidden: true}),
-  ).toBeAttached();
-
-  await search.fill('Dining out');
-  await expect(
-    dialog(page).getByRole('option', {name: 'Category › Food › Dining out', exact: true}),
-  ).toBeVisible();
-  await page.keyboard.press('Enter');
-  await expect(
-    page.getByRole('button', {name: 'Remove filter Dining out'}),
-  ).toBeVisible();
-  await expect(page.getByRole('button', {name: 'Remove filter Groceries'})).toHaveCount(
-    0,
-  );
 });
 
 test('command search offers one sort action per column and reverses the active sort', async ({
@@ -1306,34 +1398,38 @@ test('command search offers one sort action per column and reverses the active s
   const payeeSort = dialog(page).getByRole('option', {name: /^Sort by › Payee /});
   const payeeHeader = page.getByRole('columnheader', {name: 'Payee'});
 
-  await page.keyboard.press('Control+k');
-  await expect(payeeSort).toHaveCount(0);
-  await search.fill('payee');
-  await expect(payeeSort).toHaveCount(1);
-  await expect(payeeSort).toHaveAccessibleName('Sort by › Payee A to Z');
-  await expect(payeeSort.locator('svg')).toBeVisible();
-  const label = payeeSort.getByText('Sort by › Payee', {exact: true});
-  const direction = payeeSort.getByText('A to Z', {exact: true});
-  await expect(label).toHaveText('Sort by › Payee');
-  await expect(direction).toHaveText('A to Z');
-  expect((await direction.boundingBox())!.x).toBeGreaterThan(
-    (await label.boundingBox())!.x,
-  );
-  await payeeSort.click();
-  await expect(payeeHeader).toHaveAttribute('aria-sort', 'ascending');
+  await test.step('Offer one ascending Payee action with its icon and label', async () => {
+    await page.keyboard.press('Control+k');
+    await expect(payeeSort).toHaveCount(0);
+    await search.fill('payee');
+    await expect(payeeSort).toHaveCount(1);
+    await expect(payeeSort).toHaveAccessibleName('Sort by › Payee A to Z');
+    await expect(payeeSort.locator('svg')).toBeVisible();
+    const label = payeeSort.getByText('Sort by › Payee', {exact: true});
+    const direction = payeeSort.getByText('A to Z', {exact: true});
+    await expect(label).toHaveText('Sort by › Payee');
+    await expect(direction).toHaveText('A to Z');
+    expect((await direction.boundingBox())!.x).toBeGreaterThan(
+      (await label.boundingBox())!.x,
+    );
+    await payeeSort.click();
+    await expect(payeeHeader).toHaveAttribute('aria-sort', 'ascending');
+  });
 
-  await page.keyboard.press('Control+k');
-  await search.fill('sort by payee z to a');
-  await expect(payeeSort).toHaveCount(1);
-  await expect(payeeSort).toHaveAccessibleName('Sort by › Payee Z to A');
-  await payeeSort.click();
-  await expect(payeeHeader).toHaveAttribute('aria-sort', 'descending');
+  await test.step('Reverse the sort and show the next direction in the submenu', async () => {
+    await page.keyboard.press('Control+k');
+    await search.fill('sort by payee z to a');
+    await expect(payeeSort).toHaveCount(1);
+    await expect(payeeSort).toHaveAccessibleName('Sort by › Payee Z to A');
+    await payeeSort.click();
+    await expect(payeeHeader).toHaveAttribute('aria-sort', 'descending');
 
-  await page.keyboard.press('S');
-  const submenuPayeeSort = dialog(page).getByRole('option', {name: /^Payee /});
-  await expect(submenuPayeeSort).toHaveCount(1);
-  await expect(submenuPayeeSort).toHaveAccessibleName('Payee A to Z');
-  await expect(dialog(page).locator('[cmdk-item] svg')).toHaveCount(7);
+    await page.keyboard.press('S');
+    const submenuPayeeSort = dialog(page).getByRole('option', {name: /^Payee /});
+    await expect(submenuPayeeSort).toHaveCount(1);
+    await expect(submenuPayeeSort).toHaveAccessibleName('Payee A to Z');
+    await expect(dialog(page).locator('[cmdk-item] svg')).toHaveCount(7);
+  });
 });
 
 test('category pickers show groups and pin selected entries at opening', async ({
@@ -1418,17 +1514,19 @@ test('Enter saves typed payees in inline and bulk editors', async ({page}) => {
   await page.keyboard.press('Enter');
   await expect(first).toBeFocused();
 
-  await page.keyboard.press('Shift+J');
-  await page.keyboard.press('P');
-  const bulk = dialog(page).getByRole('combobox', {name: 'Payee'});
-  await bulk.fill('Another merchant');
-  await page.keyboard.press('Enter');
-  await expect(dialog(page)).toBeHidden();
-  for (const id of [1, 2]) {
-    await expect(
-      row(page, id).getByRole('button', {name: 'Edit payee for Another merchant'}),
-    ).toBeVisible();
-  }
+  await test.step('Save a typed payee across the selected rows', async () => {
+    await page.keyboard.press('Shift+J');
+    await page.keyboard.press('P');
+    const bulk = dialog(page).getByRole('combobox', {name: 'Payee'});
+    await bulk.fill('Another merchant');
+    await page.keyboard.press('Enter');
+    await expect(dialog(page)).toBeHidden();
+    for (const id of [1, 2]) {
+      await expect(
+        row(page, id).getByRole('button', {name: 'Edit payee for Another merchant'}),
+      ).toBeVisible();
+    }
+  });
 });
 
 test('payee suggestions float below the input and can save a known payee', async ({
@@ -1439,26 +1537,30 @@ test('payee suggestions float below the input and can save a known payee', async
   await page.keyboard.press('P');
   const input = row(page, 1).getByRole('combobox', {name: 'Payee'});
   await input.fill('Superior');
-  const suggestion = page.getByRole('option', {name: 'Superiority Burger'});
-  await expect(suggestion).toBeVisible();
-  await expect(row(page, 1).getByRole('option')).toHaveCount(0);
-  const inputBounds = (await input.boundingBox())!;
-  const listBounds = (await page.getByRole('listbox').locator('..').boundingBox())!;
-  expect(Math.abs(listBounds.x - inputBounds.x)).toBeLessThan(2);
-  expect(listBounds.y).toBeGreaterThan(inputBounds.y + inputBounds.height);
+  await test.step('Place suggestions below the payee input', async () => {
+    const suggestion = page.getByRole('option', {name: 'Superiority Burger'});
+    await expect(suggestion).toBeVisible();
+    await expect(row(page, 1).getByRole('option')).toHaveCount(0);
+    const inputBounds = (await input.boundingBox())!;
+    const listBounds = (await page.getByRole('listbox').locator('..').boundingBox())!;
+    expect(Math.abs(listBounds.x - inputBounds.x)).toBeLessThan(2);
+    expect(listBounds.y).toBeGreaterThan(inputBounds.y + inputBounds.height);
+  });
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Enter');
   await expect(input).toHaveCount(0);
   await expect(row(page, 1)).toContainText('Superiority Burger');
   await expect(row(page, 1)).toBeFocused();
-  await expect(page.getByRole('button', {name: 'Undo', exact: true})).toBeEnabled();
+  await test.step('Save a suggested payee with a pointer click', async () => {
+    await expect(page.getByRole('button', {name: 'Undo', exact: true})).toBeEnabled();
 
-  await page.keyboard.press('P');
-  await input.fill('Union');
-  await page.getByRole('option', {name: 'Union Square Greenmarket'}).click();
-  await expect(input).toHaveCount(0);
-  await expect(row(page, 1)).toContainText('Union Square Greenmarket');
-  await expect(row(page, 1)).toBeFocused();
+    await page.keyboard.press('P');
+    await input.fill('Union');
+    await page.getByRole('option', {name: 'Union Square Greenmarket'}).click();
+    await expect(input).toHaveCount(0);
+    await expect(row(page, 1)).toContainText('Union Square Greenmarket');
+    await expect(row(page, 1)).toBeFocused();
+  });
 });
 
 test('bulk commands align counts and R reviews the selection with confirmation', async ({
@@ -1506,68 +1608,81 @@ test('monthly budget stays pinned, scrolls independently, and toggles with ]', a
   const budget = page.getByRole('complementary', {name: 'Monthly budget'});
   const toggle = page.getByRole('button', {name: 'Budget', exact: true});
   const grid = page.getByRole('grid', {name: 'Transactions'});
-  await expect(budget.getByRole('meter', {name: 'Food budget used'})).toBeVisible();
-  const bar = (await page.getByRole('banner').boundingBox())!;
-  const initial = (await budget.boundingBox())!;
-  const heading = budget.getByRole('heading', {name: 'Monthly budget'});
-  const headingInset = (await heading.boundingBox())!.y - initial.y;
-  expect(headingInset).toBeGreaterThan(0);
-  const width = await page.evaluate(() => document.documentElement.clientWidth);
-  expect(initial.y).toBeCloseTo(bar.y + bar.height, 0);
-  expect(initial.x + initial.width).toBeCloseTo(width, 0);
-  expect(initial.height).toBeCloseTo(260, 0);
+  const {heading, initial, headingInset} =
+    await test.step('Align the budget with the viewport and banner', async () => {
+      await expect(budget.getByRole('meter', {name: 'Food budget used'})).toBeVisible();
+      const bar = (await page.getByRole('banner').boundingBox())!;
+      const initial = (await budget.boundingBox())!;
+      const heading = budget.getByRole('heading', {name: 'Monthly budget'});
+      const headingInset = (await heading.boundingBox())!.y - initial.y;
+      expect(headingInset).toBeGreaterThan(0);
+      const width = await page.evaluate(() => document.documentElement.clientWidth);
+      expect(initial.y).toBeCloseTo(bar.y + bar.height, 0);
+      expect(initial.x + initial.width).toBeCloseTo(width, 0);
+      expect(initial.height).toBeCloseTo(260, 0);
+      return {heading, initial, headingInset};
+    });
 
-  await page.mouse.move(400, 200);
-  for (const delta of [16, 16, 16, 82, 60]) {
-    const scroll = await page.evaluate(() => window.scrollY);
-    await page.mouse.wheel(0, delta);
-    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(scroll + delta);
-    const top = Math.max(0, initial.y - scroll - delta);
+  const pinned = await test.step('Pin the budget during page scrolling', async () => {
+    await page.mouse.move(400, 200);
+    for (const delta of [16, 16, 16, 82, 60]) {
+      const scroll = await page.evaluate(() => window.scrollY);
+      await page.mouse.wheel(0, delta);
+      await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(scroll + delta);
+      const top = Math.max(0, initial.y - scroll - delta);
+      await expect
+        .poll(async () => Math.abs((await budget.boundingBox())!.y - top))
+        .toBeLessThan(1);
+      const bounds = (await budget.boundingBox())!;
+      expect(bounds.height).toBeCloseTo(initial.height, 0);
+      expect((await heading.boundingBox())!.y - bounds.y).toBeCloseTo(headingInset, 0);
+    }
+    await page.mouse.wheel(0, 5000);
     await expect
-      .poll(async () => Math.abs((await budget.boundingBox())!.y - top))
+      .poll(() =>
+        page.evaluate(
+          () => document.documentElement.scrollHeight - innerHeight - scrollY,
+        ),
+      )
       .toBeLessThan(1);
-    const bounds = (await budget.boundingBox())!;
-    expect(bounds.height).toBeCloseTo(initial.height, 0);
-    expect((await heading.boundingBox())!.y - bounds.y).toBeCloseTo(headingInset, 0);
-  }
-  await page.mouse.wheel(0, 5000);
-  await expect
-    .poll(() =>
-      page.evaluate(() => document.documentElement.scrollHeight - innerHeight - scrollY),
-    )
-    .toBeLessThan(1);
-  const pinned = (await budget.boundingBox())!;
-  expect(pinned.y).toBeCloseTo(0, 0);
-  expect(pinned.y + pinned.height).toBeCloseTo(260, 0);
+    const pinned = (await budget.boundingBox())!;
+    expect(pinned.y).toBeCloseTo(0, 0);
+    expect(pinned.y + pinned.height).toBeCloseTo(260, 0);
+    return pinned;
+  });
 
-  const content = budget.getByRole('list').first().locator('..');
-  const headingTop = (await heading.boundingBox())!.y;
-  const scroll = await page.evaluate(() => window.scrollY);
-  expect(await content.evaluate(element => element.scrollTop)).toBe(0);
+  await test.step('Scroll budget content independently', async () => {
+    const content = budget.getByRole('list').first().locator('..');
+    const headingTop = (await heading.boundingBox())!.y;
+    const scroll = await page.evaluate(() => window.scrollY);
+    expect(await content.evaluate(element => element.scrollTop)).toBe(0);
 
-  await page.mouse.move(pinned.x + pinned.width / 2, pinned.y + pinned.height / 2);
-  await page.mouse.wheel(0, 80);
-  await expect
-    .poll(() => content.evaluate(element => element.scrollTop))
-    .toBeGreaterThan(0);
-  expect((await heading.boundingBox())!.y).toBe(headingTop);
-  expect(await page.evaluate(() => window.scrollY)).toBe(scroll);
+    await page.mouse.move(pinned.x + pinned.width / 2, pinned.y + pinned.height / 2);
+    await page.mouse.wheel(0, 80);
+    await expect
+      .poll(() => content.evaluate(element => element.scrollTop))
+      .toBeGreaterThan(0);
+    expect((await heading.boundingBox())!.y).toBe(headingTop);
+    expect(await page.evaluate(() => window.scrollY)).toBe(scroll);
+  });
 
-  const expandedGrid = (await grid.boundingBox())!.width;
-  await page.keyboard.press(']');
-  await expect(budget).toBeHidden();
-  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-  expect((await grid.boundingBox())!.width).toBeGreaterThan(expandedGrid);
+  await test.step('Toggle the budget and keep it beside the grid at narrow widths', async () => {
+    const expandedGrid = (await grid.boundingBox())!.width;
+    await page.keyboard.press(']');
+    await expect(budget).toBeHidden();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect((await grid.boundingBox())!.width).toBeGreaterThan(expandedGrid);
 
-  await page.keyboard.press(']');
-  await expect(budget).toBeVisible();
-  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-  await page.setViewportSize({width: 960, height: 260});
-  const narrowBudget = (await budget.boundingBox())!;
-  const narrowGrid = (await grid.boundingBox())!;
-  expect(narrowBudget.x).toBeGreaterThanOrEqual(narrowGrid.x + narrowGrid.width);
-  await toggle.click();
-  await expect(budget).toBeHidden();
+    await page.keyboard.press(']');
+    await expect(budget).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await page.setViewportSize({width: 960, height: 260});
+    const narrowBudget = (await budget.boundingBox())!;
+    const narrowGrid = (await grid.boundingBox())!;
+    expect(narrowBudget.x).toBeGreaterThanOrEqual(narrowGrid.x + narrowGrid.width);
+    await toggle.click();
+    await expect(budget).toBeHidden();
+  });
 });
 
 test('budget category groups expand and collapse independently', async ({page}) => {

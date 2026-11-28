@@ -29,6 +29,54 @@ import {createEditQueue} from './editQueue';
 type SessionPage = TransactionPage & {writeVersion: number; readVersion: number};
 type PreparedUpdate = Update & {original: Row; addTags?: number[]};
 
+async function readMissingRows(source: DataSource, ids: number[]) {
+  const found: Row[] = [];
+  const issues: WriteIssue[] = [];
+  for (let index = 0; index < ids.length; index += 16) {
+    const batch = ids.slice(index, index + 16);
+    const fetched = await Promise.allSettled(batch.map(id => source.get(id)));
+    for (const [offset, result] of fetched.entries()) {
+      const id = batch[offset];
+      if (result.status === 'rejected') {
+        issues.push({
+          kind: 'requestFailed',
+          operation: 'read',
+          ids: [id],
+          error: result.reason,
+        });
+      } else if (result.value.id !== id) {
+        issues.push({kind: 'unavailable', id});
+      } else {
+        found.push(result.value);
+      }
+    }
+  }
+  return {found, issues};
+}
+
+function compareWrite(
+  update: ReturnType<typeof editUpdate>,
+  original: Row,
+  kind: EditKind,
+) {
+  const desired = resolvePatch(update, original);
+  const fields = patchKeys(desired);
+  const changed = fields.filter(key => !equalField(key, original, desired));
+  const satisfied = fields.filter(key => !changed.includes(key));
+  const conflicts =
+    kind === 'save'
+      ? []
+      : changed.filter(
+          key => key !== 'tag_ids' && !equalField(key, original, update.expected),
+        );
+
+  return {
+    patch: changed.length ? pickFields(desired, changed) : undefined,
+    satisfied,
+    conflicts,
+  };
+}
+
 export function createSession(source: DataSource) {
   const query = new QueryClient({
     defaultOptions: {
@@ -110,8 +158,16 @@ export function createSession(source: DataSource) {
     }
   }
 
+  async function readMonthSnapshots(months: ReadonlySet<string>) {
+    const snapshots: Row[][] = [];
+    for (const month of months) {
+      snapshots.push(await listTransactions(source, monthRange(month)));
+    }
+    return snapshots.flat();
+  }
+
   async function reconcile(ids: number[]): Promise<WriteIssue[]> {
-    const current = new Map<number, Row>();
+    let snapshots: Row[] = [];
     if (ids.length > 16) {
       const months = new Set(
         ids.flatMap(id => {
@@ -120,36 +176,19 @@ export function createSession(source: DataSource) {
         }),
       );
       try {
-        for (const month of months) {
-          for (const row of await listTransactions(source, monthRange(month))) {
-            current.set(row.id, row);
-          }
-        }
+        snapshots = await readMonthSnapshots(months);
       } catch (error) {
         return [{kind: 'requestFailed', operation: 'read', ids, error}];
       }
     }
 
-    const issues: WriteIssue[] = [];
-    const missing = ids.filter(id => !current.has(id));
-    for (let index = 0; index < missing.length; index += 16) {
-      const batch = missing.slice(index, index + 16);
-      const fetched = await Promise.allSettled(batch.map(id => source.get(id)));
-      for (const [offset, result] of fetched.entries()) {
-        const id = batch[offset];
-        if (result.status === 'rejected') {
-          issues.push({
-            kind: 'requestFailed',
-            operation: 'read',
-            ids: [id],
-            error: result.reason,
-          });
-        } else if (result.value.id !== id) {
-          issues.push({kind: 'unavailable', id});
-        } else {
-          current.set(id, result.value);
-        }
-      }
+    const current = new Map(snapshots.map(row => [row.id, row]));
+    const {found, issues} = await readMissingRows(
+      source,
+      ids.filter(id => !current.has(id)),
+    );
+    for (const row of found) {
+      current.set(row.id, row);
     }
 
     for (const id of ids) {
@@ -166,6 +205,43 @@ export function createSession(source: DataSource) {
       mergeRow(row);
     } catch (error) {
       issues.push({kind: 'cacheUpdateFailed', id: row.id, error});
+    }
+  }
+
+  function recordConfirmedWrites(
+    batch: PreparedUpdate[],
+    confirmed: Row[],
+    receipt: WriteReceipt,
+  ) {
+    const byId = new Map(confirmed.map(row => [row.id, row]));
+    for (const {id, original, patch, addTags} of batch) {
+      const row = byId.get(id);
+      if (!row) {
+        receipt.issues.push({kind: 'missingConfirmation', id});
+        continue;
+      }
+
+      const requested = patchKeys(patch);
+      const saved = requested.filter(key =>
+        key === 'tag_ids' && addTags
+          ? addTags.every(tag => row.tag_ids.includes(tag))
+          : equalField(key, row, patch),
+      );
+      if (saved.length !== requested.length) {
+        receipt.issues.push({
+          kind: 'differentValue',
+          id,
+          fields: requested.filter(key => !saved.includes(key)),
+        });
+      }
+      if (saved.length) {
+        const before = pickFields(original, saved);
+        if (addTags && saved.includes('tag_ids')) {
+          before.tag_ids = row.tag_ids.filter(tag => !addTags.includes(tag));
+        }
+        receipt.written.push({id, before, after: pickFields(row, saved)});
+      }
+      mergeConfirmed(row, receipt.issues);
     }
   }
 
@@ -191,36 +267,7 @@ export function createSession(source: DataSource) {
         break;
       }
 
-      const byId = new Map(confirmed.map(row => [row.id, row]));
-      for (const {id, original, patch, addTags} of batch) {
-        const row = byId.get(id);
-        if (!row) {
-          receipt.issues.push({kind: 'missingConfirmation', id});
-          continue;
-        }
-
-        const requested = patchKeys(patch);
-        const saved = requested.filter(key =>
-          key === 'tag_ids' && addTags
-            ? addTags.every(tag => row.tag_ids.includes(tag))
-            : equalField(key, row, patch),
-        );
-        if (saved.length !== requested.length) {
-          receipt.issues.push({
-            kind: 'differentValue',
-            id,
-            fields: requested.filter(key => !saved.includes(key)),
-          });
-        }
-        if (saved.length) {
-          const before = pickFields(original, saved);
-          if (addTags && saved.includes('tag_ids')) {
-            before.tag_ids = row.tag_ids.filter(tag => !addTags.includes(tag));
-          }
-          receipt.written.push({id, before, after: pickFields(row, saved)});
-        }
-        mergeConfirmed(row, receipt.issues);
-      }
+      recordConfirmedWrites(batch, confirmed, receipt);
 
       if (receipt.issues.length) {
         break;
@@ -243,6 +290,38 @@ export function createSession(source: DataSource) {
     return operation;
   }
 
+  function prepareWrites(updates: Array<ReturnType<typeof editUpdate>>, kind: EditKind) {
+    const alreadySatisfied: WriteReceipt['alreadySatisfied'] = new Map();
+    const issues: WriteIssue[] = [];
+    const prepared: PreparedUpdate[] = [];
+    for (const update of updates) {
+      const original = rows.get(update.id);
+      if (!original) {
+        issues.push({kind: 'unavailable', id: update.id});
+        continue;
+      }
+
+      const {patch, satisfied, conflicts} = compareWrite(update, original, kind);
+      if (satisfied.length) {
+        alreadySatisfied.set(update.id, satisfied);
+      }
+      if (conflicts.length) {
+        issues.push({kind: 'conflict', id: update.id, fields: conflicts});
+      }
+      if (patch) {
+        const tags = patch.tag_ids && tagChanges(original.tag_ids, patch.tag_ids);
+        prepared.push({
+          id: update.id,
+          patch,
+          original,
+          addTags: tags && !tags.removed.length ? tags.added : undefined,
+        });
+      }
+    }
+
+    return {prepared, issues, alreadySatisfied};
+  }
+
   function persist(edit: Edit, kind: EditKind) {
     return withWrite(async () => {
       const updates = edit.changes.map(change => editUpdate(change, kind));
@@ -258,41 +337,9 @@ export function createSession(source: DataSource) {
         return receipt;
       }
 
-      const prepared: PreparedUpdate[] = [];
-      for (const update of updates) {
-        const {id, expected} = update;
-        const original = rows.get(id);
-        if (!original) {
-          receipt.issues.push({kind: 'unavailable', id});
-          continue;
-        }
-
-        const desired = resolvePatch(update, original);
-        const fields = patchKeys(desired);
-        const changed = fields.filter(key => !equalField(key, original, desired));
-        const satisfied = fields.filter(key => !changed.includes(key));
-        if (satisfied.length) {
-          receipt.alreadySatisfied.set(id, satisfied);
-        }
-        if (kind !== 'save') {
-          const conflicts = changed.filter(
-            key => key !== 'tag_ids' && !equalField(key, original, expected),
-          );
-          if (conflicts.length) {
-            receipt.issues.push({kind: 'conflict', id, fields: conflicts});
-          }
-        }
-        if (changed.length) {
-          const patch = pickFields(desired, changed);
-          const tags = patch.tag_ids && tagChanges(original.tag_ids, patch.tag_ids);
-          prepared.push({
-            id,
-            patch,
-            original,
-            addTags: tags && !tags.removed.length ? tags.added : undefined,
-          });
-        }
-      }
+      const {prepared, issues, alreadySatisfied} = prepareWrites(updates, kind);
+      receipt.issues = issues;
+      receipt.alreadySatisfied = alreadySatisfied;
 
       if (!receipt.issues.length) {
         await send(prepared, receipt);
