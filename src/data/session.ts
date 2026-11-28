@@ -25,7 +25,8 @@ import {
   type WriteIssue,
   type WriteReceipt,
 } from './editChanges';
-import {createEditQueue, type EditResult} from './editQueue';
+import {createEditQueue, type EditResult, type QueuedEdit} from './editQueue';
+import {persistGroupEdit, type GroupEdit} from './transactionGroups';
 
 type SessionPage = TransactionPage & {writeVersion: number; readVersion: number};
 type PreparedUpdate = Update & {original: Row; addTags?: number[]};
@@ -102,6 +103,13 @@ export function createSession(source: DataSource) {
   }
 
   function mergeRow(row: Row) {
+    if (typeof row.group_parent_id === 'number') {
+      if (rows.has(row.id)) {
+        rows.delete(row.id);
+      }
+      return;
+    }
+
     if (rows.has(row.id)) {
       rows.update(row.id, draft => {
         Object.assign(draft, row);
@@ -153,21 +161,26 @@ export function createSession(source: DataSource) {
       }
     }
 
-    for (const id of ids) {
-      const row = current.get(id);
-      if (row) {
-        mergeConfirmed(row, issues);
-      }
-    }
-    return issues;
+    return [
+      ...issues,
+      ...ids.flatMap(id => {
+        const row = current.get(id);
+        return row ? mergeConfirmed(row) : [];
+      }),
+    ];
   }
 
-  function mergeConfirmed(row: Row, issues: WriteIssue[]) {
+  function cacheWriteIssues(id: number, write: () => void): WriteIssue[] {
     try {
-      mergeRow(row);
+      write();
+      return [];
     } catch (error) {
-      issues.push({kind: 'cacheUpdateFailed', id: row.id, error});
+      return [{kind: 'cacheUpdateFailed', id, error}];
     }
+  }
+
+  function mergeConfirmed(row: Row) {
+    return cacheWriteIssues(row.id, () => mergeRow(row));
   }
 
   async function send(updates: PreparedUpdate[], receipt: WriteReceipt) {
@@ -220,7 +233,7 @@ export function createSession(source: DataSource) {
           }
           receipt.written.push({id, before, after: pickFields(row, saved)});
         }
-        mergeConfirmed(row, receipt.issues);
+        receipt.issues.push(...mergeConfirmed(row));
       }
 
       if (receipt.issues.length) {
@@ -302,7 +315,7 @@ export function createSession(source: DataSource) {
     });
   }
 
-  async function persist(edit: Edit, kind: EditKind): Promise<EditResult> {
+  async function persistFields(edit: Edit, kind: EditKind): Promise<EditResult> {
     const receipt = await writeFields(edit, kind);
     const {written, issues} = receipt;
     if (kind === 'save') {
@@ -321,9 +334,36 @@ export function createSession(source: DataSource) {
     };
   }
 
+  function persistGroup(edit: GroupEdit, kind: EditKind): Promise<EditResult> {
+    return withWrite(async () => {
+      const result = await persistGroupEdit(source, edit.group, kind);
+      const issues = [
+        ...result.issues,
+        ...result.removedParentIds.flatMap(id =>
+          rows.has(id) ? cacheWriteIssues(id, () => rows.delete(id)) : [],
+        ),
+        ...result.rows.flatMap(mergeConfirmed),
+      ];
+
+      return {
+        applied: result.applied && {...edit, group: result.applied},
+        remaining: result.remaining && {...edit, group: result.remaining},
+        issues,
+      };
+    });
+  }
+
   const edits = createEditQueue({
-    persist,
-    recover: edit => withWrite(() => reconcile(edit.changes.map(({id}) => id))),
+    persist: (edit, kind) =>
+      'group' in edit ? persistGroup(edit, kind) : persistFields(edit, kind),
+    async recover(edit: QueuedEdit) {
+      if ('changes' in edit) {
+        return withWrite(() => reconcile(edit.changes.map(({id}) => id)));
+      }
+
+      await query.invalidateQueries({queryKey: ['transactions']});
+      return [];
+    },
   });
   return {source, query, rows, loadPage, applyPages, edits};
 }

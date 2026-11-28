@@ -48,6 +48,7 @@ import {
 import {
   facetLabels,
   filterCommands,
+  groupCommands,
   reviews,
   sortCommands,
   tableCommand,
@@ -347,6 +348,15 @@ function Workspace({
   const canNavigateRows = !suspended && visible.length > 0;
   const enterGridKeys = canNavigateRows && !grid.hasFocus;
   const readyForEdit = !load.isPending;
+  const groupingCommands = readyForEdit
+    ? groupCommands(selectedRows, edit => {
+        if (palette) {
+          close();
+        }
+
+        edits.save(edit);
+      })
+    : [];
   useHotkeys([
     {
       hotkey: shortcuts.commands,
@@ -477,6 +487,11 @@ function Workspace({
       },
       options: {enabled: !suspended && readyForEdit},
     },
+    ...groupingCommands.map(({shortcut, invoke}) => ({
+      hotkey: shortcut,
+      callback: invoke,
+      options: {enabled: gridKeys, target: grid.bindings.ref, ignoreInputs: true},
+    })),
     ...Object.values(editActions).map(({field, key}) => ({
       hotkey: key,
       callback: () => showEditor(field, keyboardTargets()),
@@ -531,11 +546,14 @@ function Workspace({
 
   const actionRows = commandTargets();
   const commandItems = readyForEdit
-    ? transactionCommands(
-        actionRows,
-        field => showEditor(field, actionRows),
-        status => review(status, actionRows),
-      )
+    ? [
+        ...transactionCommands(
+          actionRows,
+          field => showEditor(field, actionRows),
+          status => review(status, actionRows),
+        ),
+        ...groupingCommands,
+      ]
     : [];
 
   function chooseFacet(facet: MultiValueFacet, id: string) {
