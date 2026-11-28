@@ -110,6 +110,14 @@ export function createSession(source: DataSource) {
     }
   }
 
+  async function readMonths(months: Set<string>, current: Map<number, Row>) {
+    for (const month of months) {
+      for (const row of await listTransactions(source, monthRange(month))) {
+        current.set(row.id, row);
+      }
+    }
+  }
+
   async function reconcile(ids: number[]): Promise<WriteIssue[]> {
     const current = new Map<number, Row>();
     if (ids.length > 16) {
@@ -120,11 +128,7 @@ export function createSession(source: DataSource) {
         }),
       );
       try {
-        for (const month of months) {
-          for (const row of await listTransactions(source, monthRange(month))) {
-            current.set(row.id, row);
-          }
-        }
+        await readMonths(months, current);
       } catch (error) {
         return [{kind: 'requestFailed', operation: 'read', ids, error}];
       }
@@ -169,6 +173,35 @@ export function createSession(source: DataSource) {
     }
   }
 
+  function recordWrite(
+    {id, original, patch, addTags}: PreparedUpdate,
+    row: Row,
+    receipt: WriteReceipt,
+  ) {
+    const requested = patchKeys(patch);
+    const saved = requested.filter(key =>
+      key === 'tag_ids' && addTags
+        ? addTags.every(tag => row.tag_ids.includes(tag))
+        : equalField(key, row, patch),
+    );
+    if (saved.length !== requested.length) {
+      receipt.issues.push({
+        kind: 'differentValue',
+        id,
+        fields: requested.filter(key => !saved.includes(key)),
+      });
+    }
+    if (!saved.length) {
+      return;
+    }
+
+    const before = pickFields(original, saved);
+    if (addTags && saved.includes('tag_ids')) {
+      before.tag_ids = row.tag_ids.filter(tag => !addTags.includes(tag));
+    }
+    receipt.written.push({id, before, after: pickFields(row, saved)});
+  }
+
   async function send(updates: PreparedUpdate[], receipt: WriteReceipt) {
     // Lunch Money requires individual writes for split and grouped rows.
     const batches = Map.groupBy(updates, ({id, original}, index) =>
@@ -192,33 +225,14 @@ export function createSession(source: DataSource) {
       }
 
       const byId = new Map(confirmed.map(row => [row.id, row]));
-      for (const {id, original, patch, addTags} of batch) {
-        const row = byId.get(id);
+      for (const update of batch) {
+        const row = byId.get(update.id);
         if (!row) {
-          receipt.issues.push({kind: 'missingConfirmation', id});
+          receipt.issues.push({kind: 'missingConfirmation', id: update.id});
           continue;
         }
 
-        const requested = patchKeys(patch);
-        const saved = requested.filter(key =>
-          key === 'tag_ids' && addTags
-            ? addTags.every(tag => row.tag_ids.includes(tag))
-            : equalField(key, row, patch),
-        );
-        if (saved.length !== requested.length) {
-          receipt.issues.push({
-            kind: 'differentValue',
-            id,
-            fields: requested.filter(key => !saved.includes(key)),
-          });
-        }
-        if (saved.length) {
-          const before = pickFields(original, saved);
-          if (addTags && saved.includes('tag_ids')) {
-            before.tag_ids = row.tag_ids.filter(tag => !addTags.includes(tag));
-          }
-          receipt.written.push({id, before, after: pickFields(row, saved)});
-        }
+        recordWrite(update, row, receipt);
         mergeConfirmed(row, receipt.issues);
       }
 
