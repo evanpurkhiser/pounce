@@ -139,24 +139,7 @@ export function App() {
   );
 }
 
-function Workspace({
-  session,
-  live,
-  connect,
-}: {
-  session: Session;
-  live: boolean;
-  connect: (token?: string) => void;
-}) {
-  const [month, setMonth] = useState(currentMonth);
-  const [customRange, setCustomRange] = useState<Range>();
-  const [surface, setSurface] = useState<WorkspaceSurface>();
-  const [cellEditorHandle] = useState(() => Popover.createHandle());
-  const [budgetOpen, setBudgetOpen] = useState(true);
-  const budgetButton = useRef<HTMLButtonElement>(null);
-  const commandButton = useRef<HTMLButtonElement>(null);
-  const pendingFocus = useRef<() => HTMLElement | null>(undefined);
-  const range = customRange ?? monthRange(month);
+function useWorkspaceData(session: Session, range: Range) {
   const {
     data: metadata,
     isError: metadataFailed,
@@ -188,7 +171,34 @@ function Workspace({
   const lookUp = (facet: Facet, id: string) =>
     choices[facet].find(choice => choice.id === id)?.label ?? id;
   const view = useTransactionView(postedRows, range, metadata);
-  const {filters, search, sort, gridSort, visible} = view;
+  // TODO: Index historical payees per budget and persist the index and sync cursor in IndexedDB.
+  const payees = useMemo(
+    () => [...new Set(postedRows.map(row => row.payee))].sort(),
+    [postedRows],
+  );
+  return {
+    metadata,
+    metadataFailed,
+    metadataError,
+    refetchMetadata,
+    load,
+    edits,
+    choices,
+    lookUp,
+    view,
+    payees,
+  };
+}
+
+function useWorkspaceSurfaces(data: ReturnType<typeof useWorkspaceData>) {
+  const {
+    metadata,
+    view: {visible, sort},
+  } = data;
+  const [surface, setSurface] = useState<WorkspaceSurface>();
+  const [cellEditorHandle] = useState(() => Popover.createHandle());
+  const commandButton = useRef<HTMLButtonElement>(null);
+  const pendingFocus = useRef<() => HTMLElement | null>(undefined);
   const palette = surface?.kind === 'palette' ? surface : undefined;
   const overlay = palette?.overlay;
   const rowEditor =
@@ -198,7 +208,6 @@ function Workspace({
   const cellEditor = editorRow && rowEditor?.kind === 'cell' ? rowEditor : undefined;
   const suspended = Boolean(palette) || Boolean(editorRow);
   const grid = useTransactionGrid(visible, suspended, commandButton, metadata);
-  const {focusedRow, keyboardTargets, selectedRows} = grid;
 
   useLayoutEffect(() => {
     grid.endRange();
@@ -218,19 +227,6 @@ function Workspace({
     pendingFocus.current = undefined;
     grid.focusTarget(restore());
   }, [suspended]);
-  // TODO: Index historical payees per budget and persist the index and sync cursor in IndexedDB.
-  const payees = useMemo(
-    () => [...new Set(postedRows.map(row => row.payee))].sort(),
-    [postedRows],
-  );
-  const overlayTargets =
-    overlay?.kind === 'edit'
-      ? overlay.ids.flatMap(id => {
-          const row = session.rows.get(id);
-          return row ? [row] : [];
-        })
-      : [];
-
   function restoreFocus() {
     const origin = palette?.origin;
     if (origin?.element?.isConnected) {
@@ -258,24 +254,42 @@ function Workspace({
     setSurface(current => (current === palette ? undefined : current));
   }
 
-  function go(next: string) {
-    setMonth(next);
-    setCustomRange(undefined);
-    grid.reset();
-    if (palette) {
-      close();
-    } else {
-      setSurface(undefined);
-    }
-  }
+  return {
+    palette,
+    overlay,
+    editorRow,
+    inlineEditor,
+    cellEditor,
+    suspended,
+    grid,
+    cellEditorHandle,
+    commandButton,
+    pendingFocus,
+    setSurface,
+    restoreFocus,
+    open,
+    close,
+  };
+}
 
-  function toggleBudget() {
-    if (budgetOpen && document.activeElement?.closest('#monthly-budget')) {
-      budgetButton.current?.focus({preventScroll: true});
-    }
-    setBudgetOpen(open => !open);
-  }
-
+function workspaceEditors(
+  data: ReturnType<typeof useWorkspaceData>,
+  surfaces: ReturnType<typeof useWorkspaceSurfaces>,
+) {
+  const {edits, view} = data;
+  const {
+    overlay,
+    palette,
+    grid,
+    cellEditor,
+    inlineEditor,
+    editorRow,
+    commandButton,
+    pendingFocus,
+    setSurface,
+    open,
+    close,
+  } = surfaces;
   function clearFilters() {
     view.clearFilters();
     if (overlay) {
@@ -343,6 +357,51 @@ function Workspace({
     );
   }
 
+  function finishInline(value?: string, restore = true) {
+    if (!inlineEditor) {
+      return;
+    }
+    const {id, field} = inlineEditor;
+    setSurface(current => (current === inlineEditor ? undefined : current));
+    const row = editorRow;
+    if (value !== undefined && row) {
+      if (field === 'payee') {
+        changeRows('Changed payee', [row], {payee: value});
+      } else {
+        changeRows('Changed note', [row], {notes: value});
+      }
+    }
+    if (restore) {
+      pendingFocus.current = () => grid.rowElement(id) ?? commandButton.current;
+    }
+  }
+
+  return {clearFilters, changeRows, showEditor, closeCellEditor, review, finishInline};
+}
+
+function useWorkspaceShortcuts({
+  data,
+  surfaces,
+  editors,
+  month,
+  go,
+  toggleBudget,
+}: {
+  data: ReturnType<typeof useWorkspaceData>;
+  surfaces: ReturnType<typeof useWorkspaceSurfaces>;
+  editors: ReturnType<typeof workspaceEditors>;
+  month: string;
+  go: (month: string) => void;
+  toggleBudget: () => void;
+}) {
+  const {
+    edits,
+    load,
+    view: {visible},
+  } = data;
+  const {grid, suspended, open} = surfaces;
+  const {keyboardTargets} = grid;
+  const {clearFilters, review, showEditor} = editors;
   const gridKeys = !suspended && grid.hasFocus;
   const canNavigateRows = !suspended && visible.length > 0;
   const enterGridKeys = canNavigateRows && !grid.hasFocus;
@@ -483,6 +542,46 @@ function Workspace({
       options: {enabled: !suspended && readyForEdit},
     })),
   ]);
+}
+
+function workspaceModal({
+  session,
+  data,
+  surfaces,
+  editors,
+  month,
+  go,
+  range,
+  widen,
+  live,
+  connect,
+}: {
+  session: Session;
+  data: ReturnType<typeof useWorkspaceData>;
+  surfaces: ReturnType<typeof useWorkspaceSurfaces>;
+  editors: ReturnType<typeof workspaceEditors>;
+  month: string;
+  go: (month: string) => void;
+  range: Range;
+  widen: (range: Range) => void;
+  live: boolean;
+  connect: (token?: string) => void;
+}) {
+  const {metadata, choices, load, edits, view, payees} = data;
+  const {filters, search, gridSort, visible} = view;
+  const {palette, overlay, grid, open, close} = surfaces;
+  const {focusedRow, selectedRows} = grid;
+  const {clearFilters, changeRows, showEditor, review} = editors;
+  if (!overlay) {
+    return;
+  }
+  const overlayTargets =
+    overlay.kind === 'edit'
+      ? overlay.ids.flatMap(id => {
+          const row = session.rows.get(id);
+          return row ? [row] : [];
+        })
+      : [];
 
   const clearFiltersCommand = tableCommand('clear', clearFilters);
   const globalCommands = [
@@ -530,7 +629,7 @@ function Workspace({
   }
 
   const actionRows = commandTargets();
-  const commandItems = readyForEdit
+  const commandItems = !load.isPending
     ? transactionCommands(
         actionRows,
         field => showEditor(field, actionRows),
@@ -566,27 +665,6 @@ function Workspace({
       close();
     });
   }
-
-  function finishInline(value?: string, restore = true) {
-    if (!inlineEditor) {
-      return;
-    }
-    const {id, field} = inlineEditor;
-    setSurface(current => (current === inlineEditor ? undefined : current));
-    const row = editorRow;
-    if (value !== undefined && row) {
-      if (field === 'payee') {
-        changeRows('Changed payee', [row], {payee: value});
-      } else {
-        changeRows('Changed note', [row], {notes: value});
-      }
-    }
-    if (restore) {
-      pendingFocus.current = () => grid.rowElement(id) ?? commandButton.current;
-    }
-  }
-
-  const modal = overlay && renderOverlay(overlay);
 
   function renderOverlay(current: Overlay) {
     switch (current.kind) {
@@ -678,7 +756,7 @@ function Workspace({
             <RangeEditor
               range={range}
               apply={next => {
-                setCustomRange(next);
+                widen(next);
                 grid.reset();
                 open({kind: 'search'});
               }}
@@ -715,7 +793,88 @@ function Workspace({
       }
     }
   }
+  return renderOverlay(overlay);
+}
 
+function Workspace({
+  session,
+  live,
+  connect,
+}: {
+  session: Session;
+  live: boolean;
+  connect: (token?: string) => void;
+}) {
+  const [month, setMonth] = useState(currentMonth);
+  const [customRange, setCustomRange] = useState<Range>();
+
+  const [budgetOpen, setBudgetOpen] = useState(true);
+  const budgetButton = useRef<HTMLButtonElement>(null);
+  const range = customRange ?? monthRange(month);
+  const data = useWorkspaceData(session, range);
+  const surfaces = useWorkspaceSurfaces(data);
+  const editors = workspaceEditors(data, surfaces);
+  const {
+    metadata,
+    metadataFailed,
+    metadataError,
+    refetchMetadata,
+    load,
+    edits,
+    view,
+    lookUp,
+    payees,
+  } = data;
+  const {gridSort, search, visible} = view;
+  const {
+    overlay,
+    palette,
+    grid,
+    suspended,
+    inlineEditor,
+    editorRow,
+    cellEditor,
+    cellEditorHandle,
+    commandButton,
+    setSurface,
+    restoreFocus,
+    open,
+    close,
+  } = surfaces;
+  const {changeRows, showEditor, closeCellEditor, finishInline} = editors;
+  const {selectedRows} = grid;
+
+  function go(next: string) {
+    setMonth(next);
+    setCustomRange(undefined);
+    grid.reset();
+    if (palette) {
+      close();
+    } else {
+      setSurface(undefined);
+    }
+  }
+
+  function toggleBudget() {
+    if (budgetOpen && document.activeElement?.closest('#monthly-budget')) {
+      budgetButton.current?.focus({preventScroll: true});
+    }
+    setBudgetOpen(open => !open);
+  }
+
+  useWorkspaceShortcuts({data, surfaces, editors, month, go, toggleBudget});
+  const modal = workspaceModal({
+    session,
+    data,
+    surfaces,
+    editors,
+    month,
+    go,
+    range,
+    widen: setCustomRange,
+    live,
+    connect,
+  });
   return (
     <>
       <header className={styles.top}>
