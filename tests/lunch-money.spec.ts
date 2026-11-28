@@ -12,6 +12,7 @@ test('loads a connected budget, handles API errors, and restores the connection 
   sample[0] = {...sample[0], split_parent_id: 100};
   sample[1] = {...sample[1], split_parent_id: 100};
   sample[2] = {...sample[2], recurring_id: 200, amount: '-1000.0000', to_base: -1000};
+  sample[11] = {...sample[11], is_group_parent: true};
   const offsets: string[] = [];
   const selectionWrites: Array<{path: string; body: unknown}> = [];
 
@@ -180,6 +181,7 @@ test('loads a connected budget, handles API errors, and restores the connection 
   for (const [id, label, formattedAmount] of [
     [2, 'Split transaction', '$10.52'],
     [3, 'Recurring transaction', '+$1,000.00'],
+    [12, 'Transaction group', '$74.22'],
   ] as const) {
     const amount = page.locator(`[data-row-id="${id}"] [data-editor-cell=amount]`);
     const icon = amount.getByRole('img', {name: label});

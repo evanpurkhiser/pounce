@@ -21,7 +21,7 @@ import {
   type Header,
   type Row as TableRow,
 } from '@tanstack/react-table';
-import {Check, Repeat2, Split} from 'lucide-react';
+import {Check, Group, Repeat2, Split} from 'lucide-react';
 
 import {money, type Metadata, type Row} from '../data/api';
 import {NoteEditor, PayeeEditor} from '../editors/Editors';
@@ -451,6 +451,11 @@ const TransactionRow = memo(function TransactionRow({
         return (
           <span className={styles.amountContent}>
             <span className={styles.amountIndicators}>
+              {transaction.is_group_parent && (
+                <span role="img" aria-label="Transaction group" title="Transaction group">
+                  <Group className={ui.actionIcon} aria-hidden />
+                </span>
+              )}
               {(transaction.is_split_parent ||
                 typeof transaction.split_parent_id === 'number') && (
                 <span role="img" aria-label="Split transaction" title="Split transaction">
