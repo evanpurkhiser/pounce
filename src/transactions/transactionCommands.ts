@@ -215,7 +215,7 @@ export function transactionCommands(
 export function groupCommands(
   rows: Row[],
   save: (edit: GroupEdit) => void,
-): CommandItem[] {
+): Array<CommandItem & {shortcut: typeof shortcuts.group | typeof shortcuts.ungroup}> {
   const actions = [
     {
       kind: 'group',
@@ -238,6 +238,7 @@ export function groupCommands(
     .map(({kind, label, completion, icon, targets}) => ({
       id: kind,
       group: 'Transactions',
+      shortcut: shortcuts[kind],
       label,
       icon,
       invoke: () =>

@@ -348,6 +348,15 @@ function Workspace({
   const canNavigateRows = !suspended && visible.length > 0;
   const enterGridKeys = canNavigateRows && !grid.hasFocus;
   const readyForEdit = !load.isPending;
+  const groupingCommands = readyForEdit
+    ? groupCommands(selectedRows, edit => {
+        if (palette) {
+          close();
+        }
+
+        edits.save(edit);
+      })
+    : [];
   useHotkeys([
     {
       hotkey: shortcuts.commands,
@@ -478,6 +487,11 @@ function Workspace({
       },
       options: {enabled: !suspended && readyForEdit},
     },
+    ...groupingCommands.map(({shortcut, invoke}) => ({
+      hotkey: shortcut,
+      callback: invoke,
+      options: {enabled: gridKeys, target: grid.bindings.ref, ignoreInputs: true},
+    })),
     ...Object.values(editActions).map(({field, key}) => ({
       hotkey: key,
       callback: () => showEditor(field, keyboardTargets()),
@@ -538,10 +552,7 @@ function Workspace({
           field => showEditor(field, actionRows),
           status => review(status, actionRows),
         ),
-        ...groupCommands(selectedRows, edit => {
-          close();
-          edits.save(edit);
-        }),
+        ...groupingCommands,
       ]
     : [];
 
