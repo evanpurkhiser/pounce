@@ -310,8 +310,7 @@ test('loads a connected budget, handles API errors, and restores the connection 
   await expect(page.getByRole('button', {name: 'Connect Lunch Money'})).toBeVisible();
 });
 
-async function openWithPausedWrites(page: Page, failAt?: number) {
-  const source = demoSource();
+async function openWithPausedWrites(page: Page, failAt?: number, source = demoSource()) {
   const requests: string[] = [];
   const responses: Array<(value: void) => void> = [];
   await page.addInitScript(() =>
@@ -420,6 +419,42 @@ for (const keepFocus of [true, false]) {
     },
   );
 }
+
+test('a projected group follows the table sort and keeps its position on confirmation', async ({
+  page,
+}) => {
+  const source = demoSource();
+  const {date} = await source.get(1);
+  await source.update([{id: 3, patch: {date}}]);
+  const {finishWrite} = await openWithPausedWrites(page, undefined, source);
+  const displayed = page.locator('tbody tr[data-row-id]');
+  const group = displayed.filter({has: page.getByText('$14.67', {exact: true})});
+  for (const id of [1, 2]) {
+    await page.locator(`[data-row-id="${id}"]`).getByRole('checkbox').check();
+  }
+  await page.locator('[data-row-id="1"]').focus();
+  await page.keyboard.press('ControlOrMeta+g');
+
+  await expect(group).toHaveAttribute('data-row-id', '-1');
+  await expect(displayed.first()).toHaveAttribute('data-row-id', '3');
+  await expect(displayed.nth(1)).toContainText('$14.67');
+
+  const amount = page.getByRole('columnheader', {name: 'Amount', exact: true});
+  await amount.click();
+  await expect(amount).toHaveAttribute('aria-sort', 'ascending');
+  await expect(displayed.first()).toContainText('$14.67');
+
+  const dateColumn = page.getByRole('columnheader', {name: 'Date', exact: true});
+  await dateColumn.click();
+  await expect(dateColumn).toHaveAttribute('aria-sort', 'descending');
+  await expect(displayed.first()).toHaveAttribute('data-row-id', '3');
+  await expect(displayed.nth(1)).toContainText('$14.67');
+
+  await finishWrite(0);
+  await expect(group).toHaveAttribute('data-row-id', /^[0-9]+$/);
+  await expect(displayed.first()).toHaveAttribute('data-row-id', '3');
+  await expect(displayed.nth(1)).toContainText('$14.67');
+});
 
 test('undo restores group selection while the group is still saving', async ({page}) => {
   const {finishWrite, requests} = await openWithPausedWrites(page);
