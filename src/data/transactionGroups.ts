@@ -1,4 +1,4 @@
-import type {DataSource, Group, Row} from './api';
+import {isGroupPreview, type DataSource, type Group, type Row} from './api';
 import {equalField, type EditKind, type WriteIssue} from './editChanges';
 
 type GroupIntent = {kind: 'group' | 'ungroup'; ids: number[]};
@@ -23,7 +23,10 @@ function canGroupTransaction(row: Row) {
 
 export function canGroupSelection(rows: Row[]) {
   return (
-    rows.length >= 2 && rows.every(row => row.is_group_parent || canGroupTransaction(row))
+    rows.length >= 2 &&
+    rows.every(
+      row => !isGroupPreview(row) && (row.is_group_parent || canGroupTransaction(row)),
+    )
   );
 }
 
@@ -119,6 +122,15 @@ function planGroup(members: Row[]): Group {
   };
 }
 
+export function groupTarget(members: Row[], parent?: Row): Group {
+  return parent
+    ? groupDetails(
+        parent,
+        members.map(row => row.id),
+      )
+    : planGroup(members);
+}
+
 async function readMembers(source: DataSource, parents: Row[]) {
   const parentByMember = parentIdsByMember(parents);
   const members = await readRows(source, [...parentByMember.keys()]);
@@ -150,14 +162,11 @@ async function planIntent(
   }
 
   const members = [...grouped, ...selected.filter(row => !row.is_group_parent)];
-  const [firstGroup] = parents;
-  const target = firstGroup
-    ? groupDetails(
-        firstGroup,
-        members.map(row => row.id),
-      )
-    : planGroup(members);
-  return {initial: {members, parents}, before, target: [target]};
+  return {
+    initial: {members, parents},
+    before,
+    target: [groupTarget(members, parents[0])],
+  };
 }
 
 async function planReplay(

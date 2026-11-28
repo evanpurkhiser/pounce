@@ -23,7 +23,7 @@ import {
 } from '@tanstack/react-table';
 import {Check, Repeat2, Split} from 'lucide-react';
 
-import {money, type Metadata, type Row} from '../data/api';
+import {isGroupPreview, money, type Metadata, type Row} from '../data/api';
 import {NoteEditor, PayeeEditor} from '../editors/Editors';
 import {CheckboxIcon} from '../ui/CheckboxIcon';
 import ui from '../ui/ui.module.css';
@@ -387,6 +387,10 @@ const TransactionRow = memo(function TransactionRow({
     const name = ariaLabel ?? `${cellLabel ?? label} for ${payee}`;
     const content =
       typeof value === 'string' ? <span title={value || undefined}>{value}</span> : value;
+
+    if (isGroupPreview(transaction)) {
+      return content;
+    }
 
     if (isCellEditorField(field)) {
       return (

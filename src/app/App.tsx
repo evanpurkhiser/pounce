@@ -16,6 +16,7 @@ import {Toaster, toast} from 'sonner';
 import {Budget} from '../budget/Budget';
 import {
   currentMonth,
+  isGroupPreview,
   liveSource,
   monthLabel,
   monthRange,
@@ -169,7 +170,7 @@ function Workspace({
   });
   const load = useTransactionPages(session, range);
   const {data: allRows = []} = useLiveQuery(session.rows);
-  const edits = useEdits(session, allRows);
+  const edits = useEdits(session, allRows, metadata?.currency);
   const postedRows = useMemo(
     () => edits.rows.filter(row => !row.is_pending),
     [edits.rows],
@@ -297,7 +298,8 @@ function Workspace({
     });
   }
 
-  function showEditor(field: Field, rows: Row[]) {
+  function showEditor(field: Field, candidates: Row[]) {
+    const rows = candidates.filter(row => !isGroupPreview(row));
     if (!rows.length) {
       return;
     }
@@ -544,7 +546,7 @@ function Workspace({
         : [];
   }
 
-  const actionRows = commandTargets();
+  const actionRows = commandTargets().filter(row => !isGroupPreview(row));
   const commandItems = readyForEdit
     ? [
         ...transactionCommands(

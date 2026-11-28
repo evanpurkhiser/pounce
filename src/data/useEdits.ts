@@ -34,13 +34,13 @@ function issueMessage(issue: EditIssue): string {
   }
 }
 
-export function useEdits({edits}: Session, rows: Row[]) {
+export function useEdits({edits}: Session, rows: Row[], currency?: Row['currency']) {
   const state = useSyncExternalStore(edits.subscribe, edits.getState);
   const {phase, queued, issues} = state;
   const history = useMemo(() => projectedHistory(state), [state]);
   const visibleRows = useMemo(
-    () => projectRows(phase, queued, rows),
-    [phase, queued, rows],
+    () => projectRows(phase, queued, rows, currency),
+    [phase, queued, rows, currency],
   );
 
   useEffect(() => {

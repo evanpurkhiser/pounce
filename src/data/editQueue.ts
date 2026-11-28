@@ -6,6 +6,7 @@ import {
   type EditKind,
   type WriteIssue,
 } from './editChanges';
+import {projectGroupRows} from './groupProjection';
 import type {GroupEdit} from './transactionGroups';
 
 export type QueuedEdit = Edit | GroupEdit;
@@ -100,12 +101,44 @@ export function projectedHistory({phase, queued, history}: State) {
   );
 }
 
-export function projectRows(phase: Phase, queued: Job[], rows: Row[]) {
+export function projectRows(
+  phase: Phase,
+  queued: Job[],
+  rows: Row[],
+  baseCurrency?: Row['currency'],
+) {
   const jobs = pendingJobs(phase, queued);
   if (!jobs.length) {
     return rows;
   }
 
+  if (!jobs.some(({entry}) => 'group' in entry.edit)) {
+    return projectFieldRows(jobs, rows);
+  }
+
+  // Undo can queue while the original group is still saving. The two drafts
+  // cancel visually until the save supplies a confirmed membership to undo.
+  const reversingDrafts = new Set(
+    jobs.flatMap(({kind, entry: {id, edit}}) =>
+      kind === 'undo' && 'group' in edit && edit.group.kind !== 'membership' ? [id] : [],
+    ),
+  );
+  return jobs.reduce((visible, job) => {
+    const {
+      kind,
+      entry: {id, edit},
+    } = job;
+    if (reversingDrafts.has(id)) {
+      return visible;
+    }
+
+    return 'group' in edit
+      ? projectGroupRows(visible, edit.group, kind, baseCurrency)
+      : projectFieldRows([job], visible);
+  }, rows);
+}
+
+function projectFieldRows(jobs: Job[], rows: Row[]) {
   const updates = Map.groupBy(
     jobs.flatMap(({kind, entry: {edit}}) =>
       'changes' in edit ? edit.changes.map(change => editUpdate(change, kind)) : [],
