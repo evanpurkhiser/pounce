@@ -329,30 +329,32 @@ export function createSession(source: DataSource) {
     };
   }
 
-  async function persistGroup(edit: GroupEdit, kind: EditKind): Promise<EditResult> {
-    const result = await withWrite(() =>
-      persistGroupEdit(source, edit.group, kind, (previousParents, current, issues) => {
-        const parents = new Set(current.parents.map(row => row.id));
-        for (const {id} of previousParents) {
-          if (!parents.has(id) && rows.has(id)) {
-            try {
-              rows.delete(id);
-            } catch (error) {
-              issues.push({kind: 'cacheUpdateFailed', id, error});
-            }
-          }
+  function persistGroup(edit: GroupEdit, kind: EditKind): Promise<EditResult> {
+    return withWrite(async () => {
+      const result = await persistGroupEdit(source, edit.group, kind);
+      const issues = [...result.issues];
+      for (const id of result.removedParentIds) {
+        if (!rows.has(id)) {
+          continue;
         }
 
-        for (const row of [...current.members, ...current.parents]) {
-          mergeConfirmed(row, issues);
+        try {
+          rows.delete(id);
+        } catch (error) {
+          issues.push({kind: 'cacheUpdateFailed', id, error});
         }
-      }),
-    );
-    return {
-      applied: result.applied && {...edit, group: result.applied},
-      remaining: result.remaining && {...edit, group: result.remaining},
-      issues: result.issues,
-    };
+      }
+
+      for (const row of result.rows) {
+        mergeConfirmed(row, issues);
+      }
+
+      return {
+        applied: result.applied && {...edit, group: result.applied},
+        remaining: result.remaining && {...edit, group: result.remaining},
+        issues,
+      };
+    });
   }
 
   const edits = createEditQueue({

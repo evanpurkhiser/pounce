@@ -352,36 +352,51 @@ test('adding a transaction to a group preserves its details and can be replayed'
   expect(group()?.children).toHaveLength(3);
 });
 
-test('a failed merge keeps the confirmed ungrouping undoable', async () => {
-  const {source, session, page, range, signal} = await loadSession();
-  const ids = page.rows.slice(0, 4).map(row => row.id);
-  const oldGroups = await Promise.all([
-    source.group({ids: ids.slice(0, 2), date: page.rows[0].date, payee: 'First group'}),
-    source.group({ids: ids.slice(2), date: page.rows[2].date, payee: 'Second group'}),
-  ]);
-  const refreshed = await session.loadPage(range, 0, signal);
-  expect(session.applyPages(range, [refreshed])).toBe(true);
+for (const refreshSucceeds of [true, false]) {
+  test(`a failed merge keeps confirmed ungrouping undoable ${refreshSucceeds ? 'after refreshing' : 'when refresh fails'}`, async () => {
+    const {source, session, page, range, signal} = await loadSession();
+    const ids = page.rows.slice(0, 4).map(row => row.id);
+    const oldGroups = await Promise.all([
+      source.group({ids: ids.slice(0, 2), date: page.rows[0].date, payee: 'First group'}),
+      source.group({ids: ids.slice(2), date: page.rows[2].date, payee: 'Second group'}),
+    ]);
+    const refreshed = await session.loadPage(range, 0, signal);
+    expect(session.applyPages(range, [refreshed])).toBe(true);
 
-  const group = source.group;
-  source.group = async () => {
-    throw new Error('Merge failed');
-  };
-  session.edits.save({
-    label: 'Grouped transactions',
-    group: {kind: 'group', ids: oldGroups.map(row => row.id)},
+    const {get, group} = source;
+    source.group = async () => {
+      if (!refreshSucceeds) {
+        source.get = async () => {
+          throw new Error('Refresh failed');
+        };
+      }
+      throw new Error('Merge failed');
+    };
+    session.edits.save({
+      label: 'Grouped transactions',
+      group: {kind: 'group', ids: oldGroups.map(row => row.id)},
+    });
+    const state = await settled(session);
+    expect(state.issues).toEqual(
+      (refreshSucceeds ? ['write'] : ['write', 'read']).map(operation =>
+        expect.objectContaining({kind: 'requestFailed', operation}),
+      ),
+    );
+    expect(state.history.undo).toHaveLength(1);
+    expect(ids.every(id => session.rows.get(id)?.group_parent_id === null)).toBe(true);
+
+    source.get = get;
+    source.group = group;
+    session.edits.replay('undo');
+    await expectSaved(session);
+    const restored = [...session.rows.values()].filter(row => row.is_group_parent);
+    expect(restored.map(row => row.payee).sort()).toEqual([
+      'First group',
+      'Second group',
+    ]);
+    expect(restored.map(row => row.children?.map(child => child.id))).toEqual([
+      ids.slice(0, 2),
+      ids.slice(2),
+    ]);
   });
-  const state = await settled(session);
-  expect(state.issues).toContainEqual(expect.objectContaining({kind: 'requestFailed'}));
-  expect(state.history.undo).toHaveLength(1);
-  expect(ids.every(id => session.rows.get(id)?.group_parent_id === null)).toBe(true);
-
-  source.group = group;
-  session.edits.replay('undo');
-  await expectSaved(session);
-  const restored = [...session.rows.values()].filter(row => row.is_group_parent);
-  expect(restored.map(row => row.payee).sort()).toEqual(['First group', 'Second group']);
-  expect(restored.map(row => row.children?.map(child => child.id))).toEqual([
-    ids.slice(0, 2),
-    ids.slice(2),
-  ]);
-});
+}
