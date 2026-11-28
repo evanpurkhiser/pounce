@@ -6,16 +6,18 @@ import {
   type EditKind,
   type WriteIssue,
 } from './editChanges';
+import type {GroupEdit} from './transactionGroups';
 
-type Entry = {kind: 'edit'; id: symbol; edit: Edit};
+export type QueuedEdit = Edit | GroupEdit;
+type Entry = {kind: 'edit'; id: symbol; edit: QueuedEdit};
 type Save = {kind: 'save'; entry: Entry};
 type Job = Save | {kind: 'undo' | 'redo'; entry: Entry};
 type Redo = Entry | Save;
 type History = {undo: Entry[]; redo: Redo[]};
 type Phase = {kind: 'idle'} | {kind: 'writing'; job: Job} | {kind: 'recovering'};
 export type EditResult = {
-  applied?: Edit;
-  remaining?: Edit;
+  applied?: QueuedEdit;
+  remaining?: QueuedEdit;
   savedCount?: number;
   issues: WriteIssue[];
 };
@@ -42,8 +44,8 @@ type Event =
   | {type: 'clearIssues'};
 
 type Adapter = {
-  persist(edit: Edit, kind: EditKind): Promise<EditResult>;
-  recover(edit: Edit): Promise<WriteIssue[]>;
+  persist(edit: QueuedEdit, kind: EditKind): Promise<EditResult>;
+  recover(edit: QueuedEdit): Promise<WriteIssue[]>;
 };
 
 const idle: Phase = {kind: 'idle'};
@@ -103,8 +105,8 @@ export function projectRows(phase: Phase, queued: Job[], rows: Row[]) {
   }
 
   const updates = Map.groupBy(
-    jobs.flatMap(({kind, entry}) =>
-      entry.edit.changes.map(change => editUpdate(change, kind)),
+    jobs.flatMap(({kind, entry: {edit}}) =>
+      'changes' in edit ? edit.changes.map(change => editUpdate(change, kind)) : [],
     ),
     ({id}) => id,
   );
@@ -289,8 +291,8 @@ export function createEditQueue(adapter: Adapter) {
         listeners.delete(listener);
       };
     },
-    save(edit: Edit) {
-      if (edit.changes.length) {
+    save(edit: QueuedEdit) {
+      if ('group' in edit || edit.changes.length) {
         dispatch({type: 'save', entry: {kind: 'edit', id: Symbol(), edit}});
         void drain();
       }

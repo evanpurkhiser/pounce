@@ -5,6 +5,7 @@ import {
   ChevronRight,
   DollarSign,
   Filter,
+  Group,
   Redo2,
   Search,
   Undo2,
@@ -13,6 +14,7 @@ import {
 } from 'lucide-react';
 
 import type {Choice, Row} from '../data/api';
+import {canGroupTransaction, type GroupEdit} from '../data/transactionGroups';
 import type {CommandItem} from '../ui/commandSearch';
 import {shortcuts} from '../ui/shortcuts';
 
@@ -207,4 +209,27 @@ export function transactionCommands(
     }
   }
   return commands;
+}
+
+export function groupCommands(
+  rows: Row[],
+  save: (edit: GroupEdit) => void,
+): CommandItem[] {
+  if (rows.length < 2 || !rows.every(canGroupTransaction)) {
+    return [];
+  }
+
+  return [
+    {
+      id: 'group',
+      group: 'Transactions',
+      label: 'Group transactions',
+      icon: Group,
+      invoke: () =>
+        save({
+          label: 'Grouped transactions',
+          group: {kind: 'group', ids: rows.map(row => row.id)},
+        }),
+    },
+  ];
 }

@@ -1,11 +1,16 @@
 import {getLocalTimeZone, parseDate, today} from '@internationalized/date';
-import {LunchMoneyClient, type components} from '@lunch-money/lunch-money-js-v2';
+import {
+  LunchMoneyClient,
+  type components,
+  type GroupTransactionsBody,
+} from '@lunch-money/lunch-money-js-v2';
 
 type Schema = components['schemas'];
 export type Row = Schema['transactionObject'];
 export type Patch = Partial<
   Pick<Row, 'payee' | 'date' | 'category_id' | 'tag_ids' | 'notes'>
 > & {status?: 'reviewed' | 'unreviewed'};
+export type Group = GroupTransactionsBody;
 export type Update = {id: number; patch: Patch};
 export type Range = {start: string; end: string};
 export type Choice = {
@@ -94,6 +99,8 @@ export interface DataSource {
     signal?: AbortSignal,
   ): Promise<TransactionPage>;
   get(id: number): Promise<Row>;
+  group(group: Group): Promise<Row>;
+  ungroup(id: number): Promise<void>;
   summary(range: Range, signal?: AbortSignal): Promise<Summary>;
   update(items: Array<Update & {addTags?: number[]}>): Promise<Row[]>;
 }
@@ -205,6 +212,8 @@ export function liveSource(apiKey: string): DataSource {
       return {rows: transactions, nextOffset: hasMore ? offset + limit : undefined};
     },
     get: id => client.transactions.get(id),
+    group: group => client.transactions.group(group),
+    ungroup: id => client.transactions.ungroup(id),
     summary: (range, signal) =>
       forRead(signal).summary.get({
         start_date: range.start,

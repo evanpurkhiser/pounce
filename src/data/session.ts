@@ -25,7 +25,8 @@ import {
   type WriteIssue,
   type WriteReceipt,
 } from './editChanges';
-import {createEditQueue, type EditResult} from './editQueue';
+import {createEditQueue, type EditResult, type QueuedEdit} from './editQueue';
+import {persistGroupEdit, type GroupEdit} from './transactionGroups';
 
 type SessionPage = TransactionPage & {writeVersion: number; readVersion: number};
 type PreparedUpdate = Update & {original: Row; addTags?: number[]};
@@ -102,6 +103,13 @@ export function createSession(source: DataSource) {
   }
 
   function mergeRow(row: Row) {
+    if (typeof row.group_parent_id === 'number') {
+      if (rows.has(row.id)) {
+        rows.delete(row.id);
+      }
+      return;
+    }
+
     if (rows.has(row.id)) {
       rows.update(row.id, draft => {
         Object.assign(draft, row);
@@ -302,7 +310,7 @@ export function createSession(source: DataSource) {
     });
   }
 
-  async function persist(edit: Edit, kind: EditKind): Promise<EditResult> {
+  async function persistFields(edit: Edit, kind: EditKind): Promise<EditResult> {
     const receipt = await writeFields(edit, kind);
     const {written, issues} = receipt;
     if (kind === 'save') {
@@ -321,9 +329,43 @@ export function createSession(source: DataSource) {
     };
   }
 
+  async function persistGroup(edit: GroupEdit, kind: EditKind): Promise<EditResult> {
+    const result = await withWrite(() =>
+      persistGroupEdit(source, edit.group, kind, (previousParents, current, issues) => {
+        const parents = new Set(current.parents.map(row => row.id));
+        for (const {id} of previousParents) {
+          if (!parents.has(id) && rows.has(id)) {
+            try {
+              rows.delete(id);
+            } catch (error) {
+              issues.push({kind: 'cacheUpdateFailed', id, error});
+            }
+          }
+        }
+
+        for (const row of [...current.members, ...current.parents]) {
+          mergeConfirmed(row, issues);
+        }
+      }),
+    );
+    return {
+      applied: result.applied && {...edit, group: result.applied},
+      remaining: result.remaining && {...edit, group: result.remaining},
+      issues: result.issues,
+    };
+  }
+
   const edits = createEditQueue({
-    persist,
-    recover: edit => withWrite(() => reconcile(edit.changes.map(({id}) => id))),
+    persist: (edit, kind) =>
+      'group' in edit ? persistGroup(edit, kind) : persistFields(edit, kind),
+    async recover(edit: QueuedEdit) {
+      if ('changes' in edit) {
+        return withWrite(() => reconcile(edit.changes.map(({id}) => id)));
+      }
+
+      await query.invalidateQueries({queryKey: ['transactions']});
+      return [];
+    },
   });
   return {source, query, rows, loadPage, applyPages, edits};
 }

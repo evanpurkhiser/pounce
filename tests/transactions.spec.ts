@@ -1591,3 +1591,28 @@ test('budget category groups expand and collapse independently', async ({page}) 
     /repeating-linear-gradient/,
   );
 });
+
+test('groups selected transactions from the palette and restores them with undo', async ({
+  page,
+}) => {
+  await ready(page);
+  await row(page, 1).getByRole('checkbox').check();
+  await row(page, 2).getByRole('checkbox').check();
+  await page.getByRole('button', {name: 'Commands'}).click();
+  await dialog(page).getByRole('combobox').fill('group transactions');
+  await dialog(page)
+    .getByRole('option', {name: 'Group transactions', exact: true})
+    .click();
+  await expect(row(page, 1)).toHaveCount(0);
+  await expect(row(page, 2)).toHaveCount(0);
+  await expect(page.getByRole('grid').getByText('$14.67', {exact: true})).toBeVisible();
+
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(row(page, 1)).toBeVisible();
+  await expect(row(page, 2)).toBeVisible();
+
+  await page.keyboard.press('ControlOrMeta+Shift+z');
+  await expect(row(page, 1)).toHaveCount(0);
+  await expect(row(page, 2)).toHaveCount(0);
+  await expect(page.getByRole('grid').getByText('$14.67', {exact: true})).toBeVisible();
+});

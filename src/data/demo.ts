@@ -87,19 +87,82 @@ export function demoSource(): DataSource {
         source: 'manual',
       })),
   );
+  let nextId = Math.max(...rows.map(row => row.id)) + 1;
+
   return {
     async metadata() {
       return metadata;
     },
     async transactionsPage(range) {
-      return {rows: rows.filter(row => inRange(row.date, range))};
+      return {
+        rows: rows.filter(
+          row => typeof row.group_parent_id !== 'number' && inRange(row.date, range),
+        ),
+      };
     },
     async get(id) {
       const row = rows.find(item => item.id === id);
       if (!row) {
         throw new Error('Transaction ' + id + ' is missing.');
       }
-      return row;
+      return row.is_group_parent
+        ? {...row, children: rows.filter(member => member.group_parent_id === id)}
+        : row;
+    },
+    async group({ids, date, payee, category_id, notes, status, tag_ids}) {
+      if (ids.length < 2) {
+        throw new Error('Grouping requires at least two transactions.');
+      }
+
+      const id = nextId++;
+      const children = ids.map(memberId => {
+        const member = rows.find(row => row.id === memberId);
+        if (
+          !member ||
+          typeof member.group_parent_id === 'number' ||
+          member.is_group_parent
+        ) {
+          throw new Error(`Cannot group transaction #${memberId}.`);
+        }
+        return {...member, group_parent_id: id};
+      });
+      const total = children.reduce((sum, row) => sum + row.to_base, 0);
+      const category = children[0].category_id;
+      const parent: Row = {
+        ...children[0],
+        id,
+        date,
+        payee,
+        original_name: null,
+        amount: total.toFixed(4),
+        to_base: total,
+        category_id:
+          category_id === undefined
+            ? children.every(row => row.category_id === category)
+              ? category
+              : null
+            : category_id,
+        notes: notes ?? null,
+        status: status ?? 'reviewed',
+        tag_ids: tag_ids ?? [],
+        group_parent_id: null,
+        is_group_parent: true,
+        manual_account_id: null,
+        plaid_account_id: null,
+        children,
+      };
+      const members = new Map(children.map(row => [row.id, row]));
+      rows = [...rows.map(row => members.get(row.id) ?? row), parent];
+      return parent;
+    },
+    async ungroup(id) {
+      if (!rows.some(row => row.id === id && row.is_group_parent)) {
+        throw new Error(`Transaction group #${id} is missing.`);
+      }
+
+      rows = rows
+        .filter(row => row.id !== id)
+        .map(row => (row.group_parent_id === id ? {...row, group_parent_id: null} : row));
     },
     async summary(range) {
       return {
@@ -109,7 +172,12 @@ export function demoSource(): DataSource {
           totals: {
             budgeted: category_id === 6 ? null : category_id === 2 ? 350 : 150,
             other_activity: rows
-              .filter(row => row.category_id === category_id && inRange(row.date, range))
+              .filter(
+                row =>
+                  typeof row.group_parent_id !== 'number' &&
+                  row.category_id === category_id &&
+                  inRange(row.date, range),
+              )
               .reduce((total, row) => total + row.to_base, 0),
             recurring_activity: 0,
             recurring_remaining: 0,

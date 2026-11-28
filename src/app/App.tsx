@@ -48,6 +48,7 @@ import {
 import {
   facetLabels,
   filterCommands,
+  groupCommands,
   reviews,
   sortCommands,
   tableCommand,
@@ -531,11 +532,17 @@ function Workspace({
 
   const actionRows = commandTargets();
   const commandItems = readyForEdit
-    ? transactionCommands(
-        actionRows,
-        field => showEditor(field, actionRows),
-        status => review(status, actionRows),
-      )
+    ? [
+        ...transactionCommands(
+          actionRows,
+          field => showEditor(field, actionRows),
+          status => review(status, actionRows),
+        ),
+        ...groupCommands(selectedRows, edit => {
+          close();
+          edits.save(edit);
+        }),
+      ]
     : [];
 
   function chooseFacet(facet: MultiValueFacet, id: string) {

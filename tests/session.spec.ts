@@ -147,7 +147,9 @@ test('a partially confirmed undo moves only the confirmed fields to redo', async
     fields: ['payee'],
   });
   expect(session.rows.get(row.id)).toMatchObject({notes: '', payee: 'New payee'});
-  expect(state.history.undo[0].edit.changes[0].after).toEqual({payee: 'New payee'});
+  expect(state.history.undo[0].edit).toMatchObject({
+    changes: [{after: {payee: 'New payee'}}],
+  });
   expect(state.history.redo[0]).toMatchObject({
     edit: {changes: [{after: {notes: 'New note'}}]},
   });
@@ -203,4 +205,76 @@ test('a local cache failure keeps the confirmed write in undo history', async ()
   session.edits.replay('undo');
   await settled(session);
   expect(session.rows.get(row.id)?.notes).toBe('');
+});
+
+async function expectSaved(session: Session) {
+  const state = await settled(session);
+  expect(state.issues).toEqual([]);
+}
+
+test('grouping shares history with field edits and redo can recreate a new parent', async () => {
+  const {source, session, page} = await loadSession();
+  const [first, second] = page.rows;
+  session.edits.save({
+    label: 'Changed note',
+    changes: [draftChange(first, {notes: 'Keep on the original transaction'})!],
+  });
+  session.edits.save({
+    label: 'Grouped transactions',
+    group: {kind: 'group', ids: [first.id, second.id]},
+  });
+  await expectSaved(session);
+
+  const original = [...session.rows.values()].find(row => row.is_group_parent)!;
+  expect(original).toMatchObject({
+    date: first.date,
+    payee: first.payee,
+    amount: '14.6700',
+    children: [{id: first.id}, {id: second.id}],
+  });
+  expect(session.rows.has(first.id)).toBe(false);
+  expect(session.rows.has(second.id)).toBe(false);
+
+  session.edits.replay('undo');
+  await expectSaved(session);
+  expect(session.rows.has(original.id)).toBe(false);
+  expect(session.rows.get(first.id)?.notes).toBe('Keep on the original transaction');
+
+  session.edits.replay('undo');
+  await settled(session);
+  expect(session.rows.get(first.id)?.notes).toBe(first.notes ?? '');
+
+  session.edits.replay('redo');
+  session.edits.replay('redo');
+  await expectSaved(session);
+  const recreated = [...session.rows.values()].find(row => row.is_group_parent)!;
+  expect(recreated.id).not.toBe(original.id);
+  const member = await source.get(first.id);
+  expect(member).toMatchObject({
+    group_parent_id: recreated.id,
+    notes: 'Keep on the original transaction',
+  });
+
+  session.edits.replay('undo');
+  await expectSaved(session);
+  expect(session.rows.get(first.id)?.group_parent_id).toBeNull();
+});
+
+test('a group write that loses its response remains undoable after confirmation', async () => {
+  const {source, session, page} = await loadSession();
+  const ids = page.rows.slice(0, 2).map(row => row.id);
+  const group = source.group;
+  source.group = async input => {
+    await group(input);
+    throw new Error('Connection interrupted');
+  };
+  session.edits.save({label: 'Grouped transactions', group: {kind: 'group', ids}});
+  const state = await settled(session);
+  expect(state.issues).toContainEqual(expect.objectContaining({kind: 'requestFailed'}));
+  expect(state.history.undo).toHaveLength(1);
+  expect([...session.rows.values()].filter(row => row.is_group_parent)).toHaveLength(1);
+
+  session.edits.replay('undo');
+  await expectSaved(session);
+  expect(ids.every(id => session.rows.get(id)?.group_parent_id === null)).toBe(true);
 });
