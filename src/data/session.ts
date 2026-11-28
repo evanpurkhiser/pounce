@@ -110,16 +110,8 @@ export function createSession(source: DataSource) {
     }
   }
 
-  async function readMonths(months: Set<string>, current: Map<number, Row>) {
-    for (const month of months) {
-      for (const row of await listTransactions(source, monthRange(month))) {
-        current.set(row.id, row);
-      }
-    }
-  }
-
   async function reconcile(ids: number[]): Promise<WriteIssue[]> {
-    const current = new Map<number, Row>();
+    const monthResults: Row[][] = [];
     if (ids.length > 16) {
       const months = new Set(
         ids.flatMap(id => {
@@ -128,12 +120,16 @@ export function createSession(source: DataSource) {
         }),
       );
       try {
-        await readMonths(months, current);
+        for (const month of months) {
+          monthResults.push(await listTransactions(source, monthRange(month)));
+        }
       } catch (error) {
         return [{kind: 'requestFailed', operation: 'read', ids, error}];
       }
     }
 
+    const monthRows = monthResults.flat();
+    const current = new Map(monthRows.map(row => [row.id, row]));
     const issues: WriteIssue[] = [];
     const missing = ids.filter(id => !current.has(id));
     for (let index = 0; index < missing.length; index += 16) {
