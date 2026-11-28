@@ -243,6 +243,33 @@ test('grouping waits for one batch of transaction reads before starting the next
   expect(group?.children?.map(row => row.id)).toEqual(ids);
 });
 
+test('grouping a split child keeps its split relationship through undo and redo', async () => {
+  const {source, session, page} = await loadSession();
+  const [child, ordinary] = page.rows;
+  const splitParentId = 1000;
+  const {get} = source;
+  source.get = async id => {
+    const row = await get(id);
+    return id === child.id ? {...row, split_parent_id: splitParentId} : row;
+  };
+
+  const ids = [child.id, ordinary.id];
+  session.edits.save({label: 'Grouped transactions', group: {kind: 'group', ids}});
+  await expectSaved(session);
+  expect(session.rows.has(child.id)).toBe(false);
+
+  session.edits.replay('undo');
+  await expectSaved(session);
+  expect(session.rows.get(child.id)).toMatchObject({
+    split_parent_id: splitParentId,
+    group_parent_id: null,
+  });
+
+  session.edits.replay('redo');
+  await expectSaved(session);
+  expect(session.rows.has(child.id)).toBe(false);
+});
+
 test('grouping shares history with field edits and redo can recreate a new parent', async () => {
   const {source, session, page} = await loadSession();
   const [first, second] = page.rows;

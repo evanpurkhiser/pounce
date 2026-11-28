@@ -1,4 +1,4 @@
-import {isSplitOrGrouped, type DataSource, type Group, type Row} from './api';
+import type {DataSource, Group, Row} from './api';
 import {equalField, type EditKind, type WriteIssue} from './editChanges';
 
 type GroupIntent = {kind: 'group'; ids: number[]};
@@ -12,7 +12,9 @@ type GroupWriteOutcome = {history: Row[]; visible: GroupState; issues: WriteIssu
 
 export function canGroupTransaction(row: Row) {
   return (
-    !isSplitOrGrouped(row) &&
+    !row.is_split_parent &&
+    !row.is_group_parent &&
+    typeof row.group_parent_id !== 'number' &&
     typeof row.recurring_id !== 'number' &&
     !row.is_pending &&
     row.status !== 'delete_pending'
