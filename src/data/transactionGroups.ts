@@ -1,7 +1,7 @@
 import type {DataSource, Group, Row} from './api';
 import {equalField, type EditKind, type WriteIssue} from './editChanges';
 
-type GroupIntent = {kind: 'group'; ids: number[]};
+type GroupIntent = {kind: 'group' | 'ungroup'; ids: number[]};
 type GroupChange = {kind: 'membership'; before: Group[]; after: Group[]};
 export type GroupEdit = {label: string; group: GroupIntent | GroupChange};
 type GroupState = {members: Row[]; parents: Row[]};
@@ -113,17 +113,37 @@ function planGroup(members: Row[]): Group {
   };
 }
 
-async function planIntent(source: DataSource, {ids}: GroupIntent): Promise<GroupPlan> {
-  const initial = await readState(source, ids);
-  if (initial.parents.length) {
+async function readMembers(source: DataSource, parents: Row[]) {
+  const parentByMember = parentIdsByMember(parents);
+  const members = await readRows(source, [...parentByMember.keys()]);
+  if (members.some(row => row.group_parent_id !== parentByMember.get(row.id))) {
     throw new Error('The transaction groups changed in Lunch Money.');
   }
 
-  if (initial.members.length < 2) {
+  return members;
+}
+
+async function planIntent(
+  source: DataSource,
+  {kind, ids}: GroupIntent,
+): Promise<GroupPlan> {
+  const selected = await readRows(source, ids);
+  const parents = selected.filter(row => row.is_group_parent);
+  if (kind === 'ungroup' && !parents.length) {
+    throw new Error('Select at least one transaction group.');
+  }
+
+  if (kind === 'group' && (selected.length < 2 || !selected.every(canGroupTransaction))) {
     throw new Error('Grouping requires at least two eligible transactions.');
   }
 
-  return {initial, before: [], target: [planGroup(initial.members)]};
+  const grouped = await readMembers(source, parents);
+  const before = describe(parents);
+  if (kind === 'ungroup') {
+    return {initial: {members: grouped, parents}, before, target: []};
+  }
+
+  return {initial: {members: selected, parents}, before, target: [planGroup(selected)]};
 }
 
 async function planReplay(

@@ -7,6 +7,7 @@ export const shortcuts = {
   undo: 'Mod+Z',
   redo: 'Mod+Shift+Z',
   group: 'Mod+G',
+  ungroup: 'Mod+Shift+G',
   previousRow: 'K',
   nextRow: 'J',
   halfPageUp: 'Control+U',

@@ -595,6 +595,7 @@ for (const {
   command,
   redo,
   group,
+  ungroup,
   clear,
   toggle,
   reset,
@@ -606,6 +607,7 @@ for (const {
     command: '⌘ K',
     redo: '⇧ ⌘ Z',
     group: '⌘ G',
+    ungroup: '⇧ ⌘ G',
     clear: '⌃ F',
     toggle: '⌘ Enter',
     reset: '⌥ Enter',
@@ -617,6 +619,7 @@ for (const {
     command: 'Ctrl+K',
     redo: 'Ctrl+Shift+Z',
     group: 'Ctrl+G',
+    ungroup: 'Ctrl+Shift+G',
     clear: 'Ctrl+F',
     toggle: 'Ctrl+Enter',
     reset: 'Alt+Enter',
@@ -646,6 +649,7 @@ for (const {
         ['Open command palette', command],
         ['Redo', redo],
         ['Group transactions', group],
+        ['Ungroup transactions', ungroup],
         ['Clear filters', clear],
         ['Toggle highlighted filter value', toggle],
         ['Reset highlighted tag change', reset],
@@ -1605,17 +1609,22 @@ test('budget category groups expand and collapse independently', async ({page}) 
   );
 });
 
+async function invokeTransactionCommand(page: Page, label: string) {
+  await page.getByRole('button', {name: 'Commands'}).click();
+  await dialog(page).getByRole('combobox').fill(label);
+  await dialog(page)
+    .getByRole('option')
+    .filter({has: page.getByText(label, {exact: true})})
+    .click();
+}
+
 test('groups selected transactions from the palette and restores them with undo', async ({
   page,
 }) => {
   await ready(page);
   await row(page, 1).getByRole('checkbox').check();
   await row(page, 2).getByRole('checkbox').check();
-  await page.getByRole('button', {name: 'Commands'}).click();
-  await dialog(page).getByRole('combobox').fill('group transactions');
-  await dialog(page)
-    .getByRole('option', {name: /^Group transactions\b/})
-    .click();
+  await invokeTransactionCommand(page, 'Group transactions');
   await expect(row(page, 1)).toHaveCount(0);
   await expect(row(page, 2)).toHaveCount(0);
   await expect(page.getByRole('grid').getByText('$14.67', {exact: true})).toBeVisible();
@@ -1660,4 +1669,88 @@ test('the group shortcut handles eligible selections with grid focus', async ({p
   await expect(row(page, 1)).toHaveCount(0);
   await expect(row(page, 2)).toHaveCount(0);
   await expect(page.getByRole('grid').getByText('$14.67', {exact: true})).toBeVisible();
+});
+
+for (const openWith of ['shortcut', 'button'] as const) {
+  test(`ungroups a focused group from the palette opened by ${openWith}`, async ({
+    page,
+  }) => {
+    await ready(page);
+    await row(page, 1).getByRole('checkbox').check();
+    await row(page, 2).getByRole('checkbox').check();
+    await invokeTransactionCommand(page, 'Group transactions');
+
+    const group = page.getByRole('row').filter({
+      has: page.getByText('$14.67', {exact: true}),
+    });
+    await expect(page.getByText('10 transactions', {exact: true})).toBeVisible();
+    await group.focus();
+    await expect(selection(page)).toHaveCount(0);
+
+    if (openWith === 'shortcut') {
+      await page.keyboard.press('ControlOrMeta+k');
+    } else {
+      await page.getByRole('button', {name: 'Commands'}).click();
+    }
+
+    await dialog(page).getByRole('combobox').fill('Ungroup transactions');
+    await dialog(page)
+      .getByRole('option', {name: /^Ungroup transactions\b/})
+      .click();
+    await expect(group).toHaveCount(0);
+    await expect(row(page, 1)).toBeVisible();
+    await expect(row(page, 2)).toBeVisible();
+
+    await page.keyboard.press('ControlOrMeta+z');
+    await expect(group).toBeVisible();
+  });
+}
+
+test('ungroups selected groups and keeps individual transactions selected', async ({
+  page,
+}) => {
+  await ready(page);
+  await row(page, 5).getByRole('checkbox').check();
+  await page.getByRole('button', {name: 'Commands'}).click();
+  await dialog(page).getByRole('combobox').fill('Ungroup transactions');
+  await expect(
+    dialog(page).getByRole('option', {name: /^Ungroup transactions\b/}),
+  ).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await row(page, 5).getByRole('checkbox').uncheck();
+
+  for (const [first, second] of [
+    [1, 2],
+    [3, 4],
+  ]) {
+    await row(page, first).getByRole('checkbox').check();
+    await row(page, second).getByRole('checkbox').check();
+    await invokeTransactionCommand(page, 'Group transactions');
+    await expect(row(page, first)).toHaveCount(0);
+  }
+
+  const groups = ['$14.67', '$40.15'].map(amount =>
+    page.getByRole('row').filter({has: page.getByText(amount, {exact: true})}),
+  );
+  for (const group of groups) {
+    await group.getByRole('checkbox').check();
+  }
+  await row(page, 5).getByRole('checkbox').check();
+  await row(page, 5).focus();
+  await page.keyboard.press('ControlOrMeta+Shift+g');
+  await expect(selection(page)).toHaveCount(1);
+  await expect(row(page, 5)).toHaveAttribute('aria-selected', 'true');
+  for (const id of [1, 2, 3, 4]) {
+    await expect(row(page, id)).toBeVisible();
+  }
+
+  await page.keyboard.press('ControlOrMeta+z');
+  for (const group of groups) {
+    await expect(group).toBeVisible();
+  }
+
+  await page.keyboard.press('ControlOrMeta+Shift+z');
+  for (const group of groups) {
+    await expect(group).toHaveCount(0);
+  }
 });

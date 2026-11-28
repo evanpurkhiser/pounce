@@ -9,6 +9,7 @@ import {
   Redo2,
   Search,
   Undo2,
+  Ungroup,
   Wallet,
   X,
 } from 'lucide-react';
@@ -214,23 +215,33 @@ export function transactionCommands(
 export function groupCommands(
   rows: Row[],
   save: (edit: GroupEdit) => void,
-): Array<CommandItem & {shortcut: typeof shortcuts.group}> {
-  if (rows.length < 2 || !rows.every(canGroupTransaction)) {
-    return [];
-  }
-
-  return [
+): Array<CommandItem & {shortcut: typeof shortcuts.group | typeof shortcuts.ungroup}> {
+  const actions = [
     {
-      id: 'group',
-      group: 'Transactions',
+      kind: 'group',
       label: 'Group transactions',
+      completion: 'Grouped transactions',
       icon: Group,
-      shortcut: shortcuts.group,
-      invoke: () =>
-        save({
-          label: 'Grouped transactions',
-          group: {kind: 'group', ids: rows.map(row => row.id)},
-        }),
+      targets: rows.length >= 2 && rows.every(canGroupTransaction) ? rows : [],
     },
-  ];
+    {
+      kind: 'ungroup',
+      label: 'Ungroup transactions',
+      completion: 'Ungrouped transactions',
+      icon: Ungroup,
+      targets: rows.filter(row => row.is_group_parent),
+    },
+  ] as const;
+
+  return actions
+    .filter(({targets}) => targets.length > 0)
+    .map(({kind, label, completion, icon, targets}) => ({
+      id: kind,
+      group: 'Transactions',
+      shortcut: shortcuts[kind],
+      label,
+      icon,
+      invoke: () =>
+        save({label: completion, group: {kind, ids: targets.map(row => row.id)}}),
+    }));
 }

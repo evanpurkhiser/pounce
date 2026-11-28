@@ -336,3 +336,36 @@ test('a group write that loses its response remains undoable after confirmation'
   await expectSaved(session);
   expect(ids.every(id => session.rows.get(id)?.group_parent_id === null)).toBe(true);
 });
+
+test('undoing an ungroup restores the metadata of an existing group', async () => {
+  const {source, session, page} = await loadSession();
+  const [first, second, third] = page.rows;
+  const existing = await source.group({
+    ids: [first.id, second.id],
+    date: second.date,
+    payee: 'Weekend purchases',
+    category_id: 1,
+    tag_ids: [2, 3],
+    notes: 'Paid together',
+    status: 'reviewed',
+  });
+  session.edits.save({
+    label: 'Ungrouped transactions',
+    group: {kind: 'ungroup', ids: [existing.id, third.id]},
+  });
+  await expectSaved(session);
+  expect(await source.get(third.id)).toEqual(third);
+  expect(session.rows.get(first.id)?.group_parent_id).toBeNull();
+
+  session.edits.replay('undo');
+  await expectSaved(session);
+  const restored = [...session.rows.values()].find(row => row.is_group_parent);
+  expect(restored).toMatchObject({
+    date: second.date,
+    payee: 'Weekend purchases',
+    category_id: 1,
+    tag_ids: [2, 3],
+    notes: 'Paid together',
+    status: 'reviewed',
+  });
+});
