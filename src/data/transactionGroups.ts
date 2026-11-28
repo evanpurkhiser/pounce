@@ -10,7 +10,7 @@ type GroupWrites = {removing: Row[]; creating: Group[]};
 type GroupWriteResult = {parents: Row[]; issues: WriteIssue[]};
 type GroupWriteOutcome = {history: Row[]; visible: GroupState; issues: WriteIssue[]};
 
-export function canGroupTransaction(row: Row) {
+function canGroupTransaction(row: Row) {
   return (
     !row.is_split_parent &&
     !row.is_group_parent &&
@@ -18,6 +18,12 @@ export function canGroupTransaction(row: Row) {
     typeof row.recurring_id !== 'number' &&
     !row.is_pending &&
     row.status !== 'delete_pending'
+  );
+}
+
+export function canGroupSelection(rows: Row[]) {
+  return (
+    rows.length >= 2 && rows.every(row => row.is_group_parent || canGroupTransaction(row))
   );
 }
 
@@ -133,8 +139,8 @@ async function planIntent(
     throw new Error('Select at least one transaction group.');
   }
 
-  if (kind === 'group' && (selected.length < 2 || !selected.every(canGroupTransaction))) {
-    throw new Error('Grouping requires at least two eligible transactions.');
+  if (kind === 'group' && !canGroupSelection(selected)) {
+    throw new Error('Grouping requires at least two eligible transactions or groups.');
   }
 
   const grouped = await readMembers(source, parents);
@@ -143,7 +149,15 @@ async function planIntent(
     return {initial: {members: grouped, parents}, before, target: []};
   }
 
-  return {initial: {members: selected, parents}, before, target: [planGroup(selected)]};
+  const members = [...grouped, ...selected.filter(row => !row.is_group_parent)];
+  const [firstGroup] = parents;
+  const target = firstGroup
+    ? groupDetails(
+        firstGroup,
+        members.map(row => row.id),
+      )
+    : planGroup(members);
+  return {initial: {members, parents}, before, target: [target]};
 }
 
 async function planReplay(

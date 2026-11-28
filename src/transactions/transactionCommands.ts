@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 
 import type {Choice, Row} from '../data/api';
-import {canGroupTransaction, type GroupEdit} from '../data/transactionGroups';
+import {canGroupSelection, type GroupEdit} from '../data/transactionGroups';
 import type {CommandItem} from '../ui/commandSearch';
 import {shortcuts} from '../ui/shortcuts';
 
@@ -222,7 +222,7 @@ export function groupCommands(
       label: 'Group transactions',
       completion: 'Grouped transactions',
       icon: Group,
-      targets: rows.length >= 2 && rows.every(canGroupTransaction) ? rows : [],
+      targets: canGroupSelection(rows) ? rows : [],
     },
     {
       kind: 'ungroup',
