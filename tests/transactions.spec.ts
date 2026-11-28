@@ -1666,3 +1666,45 @@ test('ungroups selected groups and keeps individual transactions selected', asyn
     await expect(group).toHaveCount(0);
   }
 });
+
+test('merges selected groups and individual transactions as one undoable edit', async ({
+  page,
+}) => {
+  await ready(page);
+  for (const [first, second] of [
+    [1, 2],
+    [3, 4],
+  ]) {
+    await row(page, first).getByRole('checkbox').check();
+    await row(page, second).getByRole('checkbox').check();
+    await invokeTransactionCommand(page, 'Group transactions');
+    await expect(row(page, first)).toHaveCount(0);
+  }
+
+  const groupWithAmount = (amount: string) =>
+    page.getByRole('row').filter({has: page.getByText(amount, {exact: true})});
+  const originals = ['$14.67', '$40.15'].map(groupWithAmount);
+  for (const group of originals) {
+    await group.getByRole('checkbox').check();
+  }
+  await row(page, 5).getByRole('checkbox').check();
+  await invokeTransactionCommand(page, 'Group transactions');
+
+  const merged = groupWithAmount('$84.45');
+  await expect(merged).toContainText('MUD Coffee');
+  await expect(row(page, 5)).toHaveCount(0);
+  for (const group of originals) {
+    await expect(group).toHaveCount(0);
+  }
+
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(merged).toHaveCount(0);
+  await expect(row(page, 5)).toBeVisible();
+  for (const group of originals) {
+    await expect(group).toBeVisible();
+  }
+
+  await page.keyboard.press('ControlOrMeta+Shift+z');
+  await expect(merged).toBeVisible();
+  await expect(row(page, 5)).toHaveCount(0);
+});

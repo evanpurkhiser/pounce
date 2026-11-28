@@ -13,12 +13,18 @@ type GroupReceipt = {
 type GroupState = {members: Row[]; parents: Row[]};
 type GroupPlan = {initial: GroupState; target: Group[]};
 
-export function canGroupTransaction(row: Row) {
+function canGroupTransaction(row: Row) {
   return (
     !isSplitOrGrouped(row) &&
     typeof row.recurring_id !== 'number' &&
     !row.is_pending &&
     row.status !== 'delete_pending'
+  );
+}
+
+export function canGroupSelection(rows: Row[]) {
+  return (
+    rows.length >= 2 && rows.every(row => row.is_group_parent || canGroupTransaction(row))
   );
 }
 
@@ -123,21 +129,30 @@ async function planIntent(
   {kind, ids}: GroupIntent,
 ): Promise<GroupPlan> {
   const selected = await readRows(source, ids);
-  if (kind === 'group') {
-    if (selected.length < 2 || !selected.every(canGroupTransaction)) {
-      throw new Error('Grouping requires at least two eligible transactions.');
+  const parents = selected.filter(row => row.is_group_parent);
+  if (kind === 'ungroup') {
+    if (!parents.length) {
+      throw new Error('Select at least one transaction group.');
     }
 
-    return {initial: {members: selected, parents: []}, target: [planGroup(selected)]};
+    const members = await readMembers(source, parents);
+    return {initial: {members, parents}, target: []};
   }
 
-  const parents = selected.filter(row => row.is_group_parent);
-  if (!parents.length) {
-    throw new Error('Select at least one transaction group.');
+  if (!canGroupSelection(selected)) {
+    throw new Error('Grouping requires at least two eligible transactions or groups.');
   }
 
-  const members = await readMembers(source, parents);
-  return {initial: {members, parents}, target: []};
+  const standalone = selected.filter(row => !row.is_group_parent);
+  const members = [...(await readMembers(source, parents)), ...standalone];
+  const [firstGroup] = parents;
+  const target = firstGroup
+    ? groupDetails(
+        firstGroup,
+        members.map(row => row.id),
+      )
+    : planGroup(members);
+  return {initial: {members, parents}, target: [target]};
 }
 
 async function planReplay(
