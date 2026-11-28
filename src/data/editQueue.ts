@@ -84,14 +84,16 @@ function moveEntry(
   };
 }
 
+function recordSave({undo, redo}: History, entry: Entry): History {
+  return {undo: [...undo, entry], redo: redo.filter(isDraft)};
+}
+
 // Reduce the same intents for the optimistic UI and for the history confirmed
 // by receipts. Canceling a pending intent removes its projected effects.
 export function projectedHistory({phase, queued, history}: State) {
   return pendingJobs(phase, queued).reduce(
     (current, job) =>
-      job.kind === 'save'
-        ? {undo: [...current.undo, job.entry], redo: current.redo.filter(isDraft)}
-        : moveEntry(current, job),
+      job.kind === 'save' ? recordSave(current, job.entry) : moveEntry(current, job),
     history,
   );
 }
@@ -168,13 +170,11 @@ function applyResult(
   }
 
   const confirmed = {...entry, edit: applied};
+  const updatedQueue = queued.map(item =>
+    item.entry.id === entry.id ? {...item, entry: confirmed} : item,
+  );
   if (job.kind === 'save') {
-    return {
-      history: {undo: [...history.undo, confirmed], redo: history.redo.filter(isDraft)},
-      queued: queued.map(item =>
-        item.entry.id === entry.id ? {...item, entry: confirmed} : item,
-      ),
-    };
+    return {history: recordSave(history, confirmed), queued: updatedQueue};
   }
 
   const unfinished = remaining && {...entry, edit: remaining};
@@ -185,9 +185,7 @@ function applyResult(
       unfinished ? {...confirmed, id: splitId} : confirmed,
       unfinished,
     ),
-    queued: queued.map(item =>
-      item.entry.id === entry.id ? {...item, entry: confirmed} : item,
-    ),
+    queued: updatedQueue,
   };
 }
 
