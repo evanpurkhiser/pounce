@@ -1,4 +1,4 @@
-import {isSplitOrGrouped, type DataSource, type Group, type Row} from './api';
+import type {DataSource, Group, Row} from './api';
 import {equalField, type EditKind, type WriteIssue} from './editChanges';
 
 type GroupIntent = {kind: 'group' | 'ungroup'; ids: number[]};
@@ -12,7 +12,9 @@ type GroupWriteOutcome = {history: Row[]; visible: GroupState; issues: WriteIssu
 
 export function canGroupTransaction(row: Row) {
   return (
-    !isSplitOrGrouped(row) &&
+    !row.is_split_parent &&
+    !row.is_group_parent &&
+    typeof row.group_parent_id !== 'number' &&
     typeof row.recurring_id !== 'number' &&
     !row.is_pending &&
     row.status !== 'delete_pending'
@@ -69,10 +71,14 @@ function describe(parents: Row[]) {
 }
 
 async function readRows(source: DataSource, ids: number[]) {
-  const rows: Row[] = [];
-  for (let index = 0; index < ids.length; index += 16) {
-    const batch = await Promise.all(
-      ids.slice(index, index + 16).map(async id => {
+  const batchSize = 16;
+  const batches = Array.from({length: Math.ceil(ids.length / batchSize)}, (_, index) => {
+    const start = index * batchSize;
+    return ids.slice(start, start + batchSize);
+  });
+  const rows = await Array.fromAsync(batches, batch =>
+    Promise.all(
+      batch.map(async id => {
         const row = await source.get(id);
         if (row.id !== id) {
           throw new Error(`Lunch Money did not return transaction #${id}.`);
@@ -80,11 +86,9 @@ async function readRows(source: DataSource, ids: number[]) {
 
         return row;
       }),
-    );
-    rows.push(...batch);
-  }
-
-  return rows;
+    ),
+  );
+  return rows.flat();
 }
 
 async function readState(source: DataSource, ids: number[]): Promise<GroupState> {

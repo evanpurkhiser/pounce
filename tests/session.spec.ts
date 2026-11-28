@@ -1,6 +1,6 @@
 import {expect, test} from '@playwright/test';
 
-import {currentMonth, monthRange} from '../src/data/api';
+import {currentMonth, monthRange, shiftMonth} from '../src/data/api';
 import {demoSource} from '../src/data/demo';
 import {draftChange} from '../src/data/editChanges';
 import {projectedHistory, projectRows} from '../src/data/editQueue';
@@ -211,6 +211,64 @@ async function expectSaved(session: Session) {
   const state = await settled(session);
   expect(state.issues).toEqual([]);
 }
+
+test('grouping waits for one batch of transaction reads before starting the next', async () => {
+  const {source, session, page} = await loadSession();
+  const previous = await source.transactionsPage(
+    monthRange(shiftMonth(currentMonth(), -1)),
+    0,
+  );
+  const ids = [...page.rows, ...previous.rows]
+    .filter(row => !row.is_pending)
+    .slice(0, 17)
+    .map(row => row.id);
+  const gate = Promise.withResolvers<void>();
+  const reads: number[] = [];
+  const {get} = source;
+  source.get = async id => {
+    reads.push(id);
+    if (id === ids[0]) {
+      await gate.promise;
+    }
+
+    return get(id);
+  };
+
+  session.edits.save({label: 'Grouped transactions', group: {kind: 'group', ids}});
+  await expect.poll(() => reads).toEqual(ids.slice(0, 16));
+  gate.resolve();
+  await expectSaved(session);
+  expect(reads).toEqual(ids);
+  const group = [...session.rows.values()].find(row => row.is_group_parent);
+  expect(group?.children?.map(row => row.id)).toEqual(ids);
+});
+
+test('grouping a split child keeps its split relationship through undo and redo', async () => {
+  const {source, session, page} = await loadSession();
+  const [child, ordinary] = page.rows;
+  const splitParentId = 1000;
+  const {get} = source;
+  source.get = async id => {
+    const row = await get(id);
+    return id === child.id ? {...row, split_parent_id: splitParentId} : row;
+  };
+
+  const ids = [child.id, ordinary.id];
+  session.edits.save({label: 'Grouped transactions', group: {kind: 'group', ids}});
+  await expectSaved(session);
+  expect(session.rows.has(child.id)).toBe(false);
+
+  session.edits.replay('undo');
+  await expectSaved(session);
+  expect(session.rows.get(child.id)).toMatchObject({
+    split_parent_id: splitParentId,
+    group_parent_id: null,
+  });
+
+  session.edits.replay('redo');
+  await expectSaved(session);
+  expect(session.rows.has(child.id)).toBe(false);
+});
 
 test('grouping shares history with field edits and redo can recreate a new parent', async () => {
   const {source, session, page} = await loadSession();
