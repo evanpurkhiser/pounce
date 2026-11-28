@@ -51,18 +51,24 @@ export function useEdits({edits}: Session, rows: Row[]) {
         return;
       }
       previous = result;
-      const {kind, label, receipt} = result;
-      const count = receipt.written.length;
-      if (kind === 'save' && count) {
+      const {
+        kind,
+        label,
+        result: {applied, savedCount, issues},
+      } = result;
+      if (applied && kind === 'save') {
         toast.success(label, {
           description:
-            count + (count === 1 ? ' transaction saved' : ' transactions saved'),
+            savedCount === undefined
+              ? undefined
+              : savedCount +
+                (savedCount === 1 ? ' transaction saved' : ' transactions saved'),
         });
-      } else if (kind !== 'save' && (count || receipt.alreadySatisfied.size)) {
+      } else if (applied) {
         toast.success(kind === 'undo' ? 'Undo complete' : 'Redo complete', {
           description: label,
         });
-      } else if (!receipt.issues.length) {
+      } else if (!issues.length) {
         toast.info('No changes to save.');
       }
     });
