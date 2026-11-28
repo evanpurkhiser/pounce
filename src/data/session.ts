@@ -7,9 +7,11 @@ import {
   listTransactions,
   monthRange,
   type DataSource,
+  type GroupRef,
   type Range,
   type Row,
   type TransactionPage,
+  type TransactionRef,
   type Update,
 } from './api';
 import {
@@ -315,7 +317,7 @@ export function createSession(source: DataSource) {
     });
   }
 
-  async function persistFields(edit: Edit, kind: EditKind): Promise<EditResult> {
+  async function persistFields(edit: Edit, kind: EditKind): Promise<EditResult<Edit>> {
     const receipt = await writeFields(edit, kind);
     const {written, issues} = receipt;
     if (kind === 'save') {
@@ -334,9 +336,13 @@ export function createSession(source: DataSource) {
     };
   }
 
-  function persistGroup(edit: GroupEdit, kind: EditKind): Promise<EditResult> {
+  function persistGroup(
+    edit: GroupEdit,
+    kind: EditKind,
+    bindings: ReadonlyMap<number, GroupRef>,
+  ): Promise<EditResult> {
     return withWrite(async () => {
-      const result = await persistGroupEdit(source, edit.group, kind);
+      const result = await persistGroupEdit(source, edit.group, kind, bindings);
       const issues = [
         ...result.issues,
         ...result.removedParentIds.flatMap(id =>
@@ -348,17 +354,63 @@ export function createSession(source: DataSource) {
       return {
         applied: result.applied && {...edit, group: result.applied},
         remaining: result.remaining && {...edit, group: result.remaining},
+        groupBindings: {removed: result.removedParentIds, confirmed: result.bindings},
         issues,
       };
     });
   }
 
+  function resolveFields(
+    edit: Edit<TransactionRef>,
+    bindings: ReadonlyMap<number, GroupRef>,
+  ) {
+    const byRef = new Map([...bindings].map(([id, ref]) => [ref, id]));
+    return edit.changes.flatMap(change => {
+      const id = typeof change.id === 'number' ? change.id : byRef.get(change.id);
+      return id === undefined
+        ? []
+        : [{id, target: change.id, before: change.before, after: change.after}];
+    });
+  }
+
+  async function persistTransactionEdit(
+    edit: Edit<TransactionRef>,
+    kind: EditKind,
+    bindings: ReadonlyMap<number, GroupRef>,
+  ): Promise<EditResult> {
+    const resolved = resolveFields(edit, bindings);
+    if (resolved.length !== edit.changes.length) {
+      return {issues: [{kind: 'groupUnavailable'}]};
+    }
+
+    const changes = resolved.map(({id, before, after}) => ({id, before, after}));
+    const targets = new Map(resolved.map(({id, target}) => [id, target]));
+    const result = await persistFields({...edit, changes}, kind);
+    const retarget = (saved?: Edit) =>
+      saved && {
+        ...saved,
+        changes: saved.changes.map(change => ({
+          ...change,
+          id: targets.get(change.id) ?? change.id,
+        })),
+      };
+    return {
+      ...result,
+      applied: retarget(result.applied),
+      remaining: retarget(result.remaining),
+    };
+  }
+
   const edits = createEditQueue({
-    persist: (edit, kind) =>
-      'group' in edit ? persistGroup(edit, kind) : persistFields(edit, kind),
-    async recover(edit: QueuedEdit) {
+    persist: (edit, kind, bindings) =>
+      'group' in edit
+        ? persistGroup(edit, kind, bindings)
+        : persistTransactionEdit(edit, kind, bindings),
+    async recover(edit: QueuedEdit, bindings) {
       if ('changes' in edit) {
-        return withWrite(() => reconcile(edit.changes.map(({id}) => id)));
+        return withWrite(() =>
+          reconcile(resolveFields(edit, bindings).map(({id}) => id)),
+        );
       }
 
       await query.invalidateQueries({queryKey: ['transactions']});

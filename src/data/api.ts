@@ -6,7 +6,11 @@ import {
 } from '@lunch-money/lunch-money-js-v2';
 
 type Schema = components['schemas'];
-export type Row = Schema['transactionObject'];
+export type GroupRef = `group:${string}`;
+export const newGroupRef = (): GroupRef => `group:${crypto.randomUUID()}`;
+export type TransactionRef = number | GroupRef;
+export type Row = Schema['transactionObject'] & {groupRef?: GroupRef};
+export const transactionRef = (row: Row): TransactionRef => row.groupRef ?? row.id;
 export type Patch = Partial<
   Pick<Row, 'payee' | 'date' | 'category_id' | 'tag_ids' | 'notes'>
 > & {status?: 'reviewed' | 'unreviewed'};
@@ -67,6 +71,8 @@ export const accountKey = (row: Row) =>
       ? `plaid:${row.plaid_account_id}`
       : 'cash';
 export const isGroupPreview = (row: Row) => row.id < 0;
+export const canEditRow = (row: Row) =>
+  !isGroupPreview(row) || row.groupRef !== undefined;
 export const isSplitOrGrouped = (row: Row) =>
   row.is_split_parent ||
   typeof row.split_parent_id === 'number' ||

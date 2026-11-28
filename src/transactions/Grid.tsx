@@ -23,7 +23,14 @@ import {
 } from '@tanstack/react-table';
 import {Check, Repeat2, Split} from 'lucide-react';
 
-import {isGroupPreview, money, type Metadata, type Row} from '../data/api';
+import {
+  canEditRow,
+  money,
+  transactionRef,
+  type Metadata,
+  type Row,
+  type TransactionRef,
+} from '../data/api';
 import {NoteEditor, PayeeEditor} from '../editors/Editors';
 import {CheckboxIcon} from '../ui/CheckboxIcon';
 import ui from '../ui/ui.module.css';
@@ -50,7 +57,7 @@ import type {GridInteraction} from './useTransactionGrid';
 
 type InlineEditor = {
   field: InlineEditorField;
-  id: number;
+  id: TransactionRef;
   payees: string[];
   apply: (value: string) => void;
   cancel: () => void;
@@ -147,7 +154,7 @@ const TransactionTable = memo(function TransactionTable({
       data: rows,
       columns: columnDefs,
       features,
-      getRowId: row => String(row.id),
+      getRowId: row => String(transactionRef(row)),
       // The workspace computes the order shared by search, range selection, and the palette.
       manualSorting: true,
       enableSortingRemoval: false,
@@ -227,7 +234,9 @@ const TransactionTable = memo(function TransactionTable({
             actions={actions}
             metadata={metadata}
             cellEditorHandle={cellEditorHandle}
-            inlineEditor={inlineEditor?.id === row.original.id ? inlineEditor : undefined}
+            inlineEditor={
+              inlineEditor?.id === transactionRef(row.original) ? inlineEditor : undefined
+            }
           />
         ))}
         {!tableRows.length && (
@@ -388,7 +397,7 @@ const TransactionRow = memo(function TransactionRow({
     const content =
       typeof value === 'string' ? <span title={value || undefined}>{value}</span> : value;
 
-    if (isGroupPreview(transaction)) {
+    if (!canEditRow(transaction)) {
       return <span className={styles.cellContent}>{content}</span>;
     }
 
@@ -396,7 +405,7 @@ const TransactionRow = memo(function TransactionRow({
       return (
         <Popover.Trigger
           handle={cellEditorHandle}
-          id={cellEditorTriggerId(field, id)}
+          id={cellEditorTriggerId(field, transactionRef(transaction))}
           className={`${styles.cellContent} ${styles.cellAction}`}
           data-grid-control
           tabIndex={-1}

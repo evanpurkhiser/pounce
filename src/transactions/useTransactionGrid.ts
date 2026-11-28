@@ -163,6 +163,7 @@ export function useTransactionGrid(
       const focused = document.activeElement;
       if (
         !suspended &&
+        !(next !== undefined && rowId(focusedElement()) === next) &&
         (hasFocus ||
           ref.current?.contains(focused) ||
           (confirmedGroup && focused === document.body))
