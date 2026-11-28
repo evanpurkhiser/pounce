@@ -5,9 +5,10 @@ type GroupIntent = {kind: 'group' | 'ungroup'; ids: number[]};
 type GroupChange = {kind: 'membership'; before: Group[]; after: Group[]};
 export type GroupEdit = {label: string; group: GroupIntent | GroupChange};
 type GroupState = {members: Row[]; parents: Row[]};
-type GroupPlan = {initial: GroupState; target: Group[]};
+type GroupPlan = {initial: GroupState; before: Group[]; target: Group[]};
 type GroupWrites = {removing: Row[]; creating: Group[]};
 type GroupWriteResult = {parents: Row[]; issues: WriteIssue[]};
+type GroupWriteOutcome = {history: Row[]; visible: GroupState; issues: WriteIssue[]};
 
 export function canGroupTransaction(row: Row) {
   return (
@@ -133,11 +134,12 @@ async function planIntent(
   }
 
   const grouped = await readMembers(source, parents);
+  const before = describe(parents);
   if (kind === 'ungroup') {
-    return {initial: {members: grouped, parents}, target: []};
+    return {initial: {members: grouped, parents}, before, target: []};
   }
 
-  return {initial: {members: selected, parents}, target: [planGroup(selected)]};
+  return {initial: {members: selected, parents}, before, target: [planGroup(selected)]};
 }
 
 async function planReplay(
@@ -149,14 +151,15 @@ async function planReplay(
     kind === 'undo' ? [edit.after, edit.before] : [edit.before, edit.after];
   const ids = [...new Set([...expected, ...target].flatMap(group => group.ids))];
   const initial = await readState(source, ids);
-  if (!sameGroups(describe(initial.parents), expected)) {
+  const before = describe(initial.parents);
+  if (!sameGroups(before, expected)) {
     throw new Error('The transaction groups changed in Lunch Money.');
   }
 
-  return {initial, target};
+  return {initial, before, target};
 }
 
-function planWrites({initial, target}: GroupPlan, before: Group[]): GroupWrites {
+function planWrites({initial, before, target}: GroupPlan): GroupWrites {
   const removing = initial.parents.filter(
     (_, index) => !target.some(group => sameGroup(group, before[index])),
   );
@@ -222,10 +225,9 @@ async function writeGroups(
 
 async function reconcileWrite(
   source: DataSource,
-  members: Row[],
+  {initial: {members}, before, target}: GroupPlan,
   {parents, issues}: GroupWriteResult,
-  knownGroups: Group[],
-) {
+): Promise<GroupWriteOutcome> {
   const parentByMember = parentIdsByMember(parents);
   const confirmed = {
     parents,
@@ -243,6 +245,7 @@ async function reconcileWrite(
     const visible = await readState(source, ids);
     // A lost response can hide a successful write. Only include groups from
     // the starting or requested membership in this edit's history.
+    const knownGroups = [...before, ...target];
     const matches = describe(visible.parents).every(group =>
       knownGroups.some(candidate => sameGroup(group, candidate)),
     );
@@ -266,6 +269,24 @@ function membershipChange(
   return {kind: 'membership', before, after};
 }
 
+function groupReceipt(
+  kind: EditKind,
+  {initial, before, target}: GroupPlan,
+  writtenParents: Row[],
+  {history, visible, issues}: GroupWriteOutcome,
+) {
+  const after = describe(history);
+  const visibleIds = new Set(visible.parents.map(row => row.id));
+  const previousIds = new Set([...initial.parents, ...writtenParents].map(row => row.id));
+  return {
+    applied: membershipChange(kind, before, after),
+    remaining: membershipChange(kind, after, target),
+    removedParentIds: [...previousIds].filter(id => !visibleIds.has(id)),
+    rows: [...visible.members, ...visible.parents],
+    issues,
+  };
+}
+
 export async function persistGroupEdit(
   source: DataSource,
   edit: GroupEdit['group'],
@@ -275,25 +296,7 @@ export async function persistGroupEdit(
     edit.kind === 'membership'
       ? await planReplay(source, edit, kind)
       : await planIntent(source, edit);
-  const {initial, target} = plan;
-  const before = describe(initial.parents);
-  const writes = planWrites(plan, before);
-  const result = await writeGroups(source, initial, writes);
-  const {history, visible, issues} = await reconcileWrite(
-    source,
-    initial.members,
-    result,
-    [...before, ...target],
-  );
-
-  const after = describe(history);
-  const visibleIds = new Set(visible.parents.map(row => row.id));
-  const previousIds = new Set([...initial.parents, ...result.parents].map(row => row.id));
-  return {
-    applied: membershipChange(kind, before, after),
-    remaining: membershipChange(kind, after, target),
-    removedParentIds: [...previousIds].filter(id => !visibleIds.has(id)),
-    rows: [...visible.members, ...visible.parents],
-    issues,
-  };
+  const written = await writeGroups(source, plan.initial, planWrites(plan));
+  const outcome = await reconcileWrite(source, plan, written);
+  return groupReceipt(kind, plan, written.parents, outcome);
 }
