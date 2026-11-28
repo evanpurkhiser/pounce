@@ -52,6 +52,7 @@ const groups: Array<{title: string; rows: ShortcutRow[]}> = [
     rows: [
       ...Object.values(editActions).map(({label, key}): ShortcutRow => [label, key]),
       ['Toggle review status', reviewShortcut],
+      ['Group transactions', shortcuts.group],
       ['Reset highlighted tag change', shortcuts.resetTag],
     ],
   },

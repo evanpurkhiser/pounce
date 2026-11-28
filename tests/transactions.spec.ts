@@ -588,13 +588,24 @@ test('bulk date change moves across months and can be undone from another month'
   await expect(row(page, 1)).toBeVisible();
 });
 
-for (const {platform, userAgent, modifier, command, redo, clear, toggle, reset} of [
+for (const {
+  platform,
+  userAgent,
+  modifier,
+  command,
+  redo,
+  group,
+  clear,
+  toggle,
+  reset,
+} of [
   {
     platform: 'MacIntel',
     userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
     modifier: 'Meta',
     command: '⌘ K',
     redo: '⇧ ⌘ Z',
+    group: '⌘ G',
     clear: '⌃ F',
     toggle: '⌘ Enter',
     reset: '⌥ Enter',
@@ -605,6 +616,7 @@ for (const {platform, userAgent, modifier, command, redo, clear, toggle, reset} 
     modifier: 'Control',
     command: 'Ctrl+K',
     redo: 'Ctrl+Shift+Z',
+    group: 'Ctrl+G',
     clear: 'Ctrl+F',
     toggle: 'Ctrl+Enter',
     reset: 'Alt+Enter',
@@ -633,6 +645,7 @@ for (const {platform, userAgent, modifier, command, redo, clear, toggle, reset} 
       for (const [action, label] of [
         ['Open command palette', command],
         ['Redo', redo],
+        ['Group transactions', group],
         ['Clear filters', clear],
         ['Toggle highlighted filter value', toggle],
         ['Reset highlighted tag change', reset],
@@ -1601,7 +1614,7 @@ test('groups selected transactions from the palette and restores them with undo'
   await page.getByRole('button', {name: 'Commands'}).click();
   await dialog(page).getByRole('combobox').fill('group transactions');
   await dialog(page)
-    .getByRole('option', {name: 'Group transactions', exact: true})
+    .getByRole('option', {name: /^Group transactions\b/})
     .click();
   await expect(row(page, 1)).toHaveCount(0);
   await expect(row(page, 2)).toHaveCount(0);
@@ -1612,6 +1625,38 @@ test('groups selected transactions from the palette and restores them with undo'
   await expect(row(page, 2)).toBeVisible();
 
   await page.keyboard.press('ControlOrMeta+Shift+z');
+  await expect(row(page, 1)).toHaveCount(0);
+  await expect(row(page, 2)).toHaveCount(0);
+  await expect(page.getByRole('grid').getByText('$14.67', {exact: true})).toBeVisible();
+});
+
+test('the group shortcut handles eligible selections with grid focus', async ({page}) => {
+  await ready(page);
+  const browserFindAvailable = () =>
+    page.evaluate(() => {
+      const mac = navigator.platform.startsWith('Mac');
+      return document.activeElement?.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'g',
+          code: 'KeyG',
+          metaKey: mac,
+          ctrlKey: !mac,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+
+  await row(page, 1).getByRole('checkbox').check();
+  await row(page, 1).focus();
+  expect(await browserFindAvailable()).toBe(true);
+
+  await row(page, 2).getByRole('checkbox').check();
+  await page.getByRole('button', {name: /^Commands/}).focus();
+  expect(await browserFindAvailable()).toBe(true);
+
+  await row(page, 1).focus();
+  await page.keyboard.press('ControlOrMeta+g');
   await expect(row(page, 1)).toHaveCount(0);
   await expect(row(page, 2)).toHaveCount(0);
   await expect(page.getByRole('grid').getByText('$14.67', {exact: true})).toBeVisible();

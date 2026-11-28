@@ -214,7 +214,7 @@ export function transactionCommands(
 export function groupCommands(
   rows: Row[],
   save: (edit: GroupEdit) => void,
-): CommandItem[] {
+): Array<CommandItem & {shortcut: typeof shortcuts.group}> {
   if (rows.length < 2 || !rows.every(canGroupTransaction)) {
     return [];
   }
@@ -225,6 +225,7 @@ export function groupCommands(
       group: 'Transactions',
       label: 'Group transactions',
       icon: Group,
+      shortcut: shortcuts.group,
       invoke: () =>
         save({
           label: 'Grouped transactions',
