@@ -11,6 +11,8 @@ function issueMessage(issue: EditIssue): string {
   switch (issue.kind) {
     case 'unavailable':
       return `Transaction #${issue.id} is unavailable.`;
+    case 'groupUnavailable':
+      return 'The transaction group is unavailable.';
     case 'missingConfirmation':
       return `Missing write confirmation for #${issue.id}.`;
     case 'conflict':
@@ -36,15 +38,15 @@ function issueMessage(issue: EditIssue): string {
 
 export function useEdits({edits}: Session, rows: Row[], currency?: Row['currency']) {
   const state = useSyncExternalStore(edits.subscribe, edits.getState);
-  const {phase, queued, issues} = state;
+  const {phase, queued, issues, bindings} = state;
   const restoringSelection = pendingJobs(phase, queued).some(
     ({kind, entry: {edit}}) =>
       kind === 'undo' && 'group' in edit && Boolean(edit.selection),
   );
   const history = useMemo(() => projectedHistory(state), [state]);
   const visibleRows = useMemo(
-    () => projectRows(phase, queued, rows, currency),
-    [phase, queued, rows, currency],
+    () => projectRows(phase, queued, rows, currency, bindings),
+    [phase, queued, rows, currency, bindings],
   );
 
   useEffect(() => {

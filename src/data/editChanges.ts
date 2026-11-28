@@ -1,13 +1,21 @@
 import {LunchMoneyError} from '@lunch-money/lunch-money-js-v2';
 
-import type {Patch, Row, Update} from './api';
+import {transactionRef, type Patch, type Row, type TransactionRef} from './api';
 
-export type Change = {id: number; before: Patch; after: Patch};
-export type Edit = {label: string; changes: Change[]};
+export type Change<Target extends TransactionRef = number> = {
+  id: Target;
+  before: Patch;
+  after: Patch;
+};
+export type Edit<Target extends TransactionRef = number> = {
+  label: string;
+  changes: Array<Change<Target>>;
+};
 export type EditKind = 'save' | 'undo' | 'redo';
 export type EditableKey = keyof Patch;
 export type WriteIssue =
   | {kind: 'unavailable' | 'missingConfirmation'; id: number}
+  | {kind: 'groupUnavailable'}
   | {kind: 'conflict' | 'differentValue'; id: number; fields: EditableKey[]}
   | {kind: 'requestFailed'; operation: 'read' | 'write'; ids: number[]; error: unknown}
   | {kind: 'cacheUpdateFailed'; id: number; error: unknown}
@@ -45,11 +53,11 @@ export function pickFields(values: Patch | Row, fields: EditableKey[]): Patch {
   );
 }
 
-export function draftChange(row: Row, patch: Patch): Change | undefined {
+export function draftChange(row: Row, patch: Patch): Change<TransactionRef> | undefined {
   const fields = patchKeys(patch).filter(key => !equalField(key, row, patch));
   if (fields.length) {
     return {
-      id: row.id,
+      id: transactionRef(row),
       before: pickFields(row, fields),
       after: pickFields(patch, fields),
     };
@@ -63,16 +71,26 @@ export function tagChanges(before: number[], after: number[]) {
   };
 }
 
-export type EditUpdate = Update & {expected: Patch};
+export type EditUpdate<Target extends TransactionRef = number> = {
+  id: Target;
+  patch: Patch;
+  expected: Patch;
+};
 
-export function editUpdate(change: Change, kind: EditKind): EditUpdate {
+export function editUpdate<Target extends TransactionRef>(
+  change: Change<Target>,
+  kind: EditKind,
+): EditUpdate<Target> {
   const {id, before, after} = change;
   return kind === 'undo'
     ? {id, patch: before, expected: after}
     : {id, patch: after, expected: before};
 }
 
-export function resolvePatch({patch, expected}: EditUpdate, row: Row): Patch {
+export function resolvePatch(
+  {patch, expected}: Pick<EditUpdate, 'patch' | 'expected'>,
+  row: Row,
+): Patch {
   if (!patch.tag_ids) {
     return patch;
   }

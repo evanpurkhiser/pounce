@@ -15,18 +15,19 @@ import {Toaster, toast} from 'sonner';
 
 import {Budget} from '../budget/Budget';
 import {
+  canEditRow,
   currentMonth,
-  isGroupPreview,
   liveSource,
   monthLabel,
   monthRange,
   shiftMonth,
+  transactionRef,
   type Range,
   type Row,
+  type TransactionRef,
 } from '../data/api';
 import {demoSource} from '../data/demo';
 import {draftChange} from '../data/editChanges';
-import {hasGroupMembers} from '../data/groupProjection';
 import {createSession, message, type Session} from '../data/session';
 import {useEdits} from '../data/useEdits';
 import {useTransactionPages} from '../data/useTransactionPages';
@@ -83,16 +84,16 @@ type Overlay =
         | 'connect';
     }
   | {kind: 'facet'; facet: MultiValueFacet}
-  | {kind: 'edit'; field: Field; ids: number[]};
+  | {kind: 'edit'; field: Field; ids: TransactionRef[]};
 
 type WorkspaceSurface =
   | {
       kind: 'palette';
       overlay: Overlay;
-      origin: {element: HTMLElement | null; rowId?: number};
+      origin: {element: HTMLElement | null; target?: TransactionRef};
     }
-  | {kind: 'inline'; id: number; field: InlineEditorField}
-  | {kind: 'cell'; id: number; field: CellEditorField; anchor: HTMLElement};
+  | {kind: 'inline'; id: TransactionRef; field: InlineEditorField}
+  | {kind: 'cell'; id: TransactionRef; field: CellEditorField; anchor: HTMLElement};
 
 const tokenStorageKey = 'pounce.lunchMoneyToken';
 
@@ -198,7 +199,8 @@ function Workspace({
   const overlay = palette?.overlay;
   const rowEditor =
     surface?.kind === 'inline' || surface?.kind === 'cell' ? surface : undefined;
-  const editorRow = rowEditor && visible.find(row => row.id === rowEditor.id);
+  const editorRow =
+    rowEditor && visible.find(row => transactionRef(row) === rowEditor.id);
   const inlineEditor = editorRow && rowEditor?.kind === 'inline' ? rowEditor : undefined;
   const cellEditor = editorRow && rowEditor?.kind === 'cell' ? rowEditor : undefined;
   const suspended = Boolean(palette) || Boolean(editorRow);
@@ -234,13 +236,14 @@ function Workspace({
     () => [...new Set(postedRows.map(row => row.payee))].sort(),
     [postedRows],
   );
-  const overlayTargets =
-    overlay?.kind === 'edit'
-      ? overlay.ids.flatMap(id => {
-          const row = session.rows.get(id);
-          return row ? [row] : [];
-        })
-      : [];
+  const overlayTargets = useMemo(() => {
+    if (overlay?.kind !== 'edit') {
+      return [];
+    }
+
+    const byRef = new Map(edits.rows.map(row => [transactionRef(row), row]));
+    return overlay.ids.flatMap(id => byRef.get(id) ?? []);
+  }, [overlay, edits.rows]);
 
   function restoreFocus() {
     const origin = palette?.origin;
@@ -249,7 +252,7 @@ function Workspace({
     }
 
     return (
-      grid.rowElement(origin?.rowId) ??
+      grid.rowElement(visible.find(row => transactionRef(row) === origin?.target)?.id) ??
       grid.rowElement(grid.active) ??
       commandButton.current
     );
@@ -260,10 +263,11 @@ function Workspace({
       restorePaletteOrigin.current = true;
     }
 
+    const focused = grid.focusedTransaction();
     const origin = palette?.origin ?? {
       element:
         document.activeElement instanceof HTMLElement ? document.activeElement : null,
-      rowId: grid.focusedTransaction()?.id,
+      target: focused && transactionRef(focused),
     };
     setSurface({kind: 'palette', overlay: next, origin});
   }
@@ -312,7 +316,7 @@ function Workspace({
   }
 
   function showEditor(field: Field, candidates: Row[]) {
-    const rows = candidates.filter(row => !isGroupPreview(row));
+    const rows = candidates.filter(canEditRow);
     if (!rows.length) {
       return;
     }
@@ -322,16 +326,17 @@ function Workspace({
       const anchor = grid.cellElement(id, field);
       if (anchor) {
         anchor.scrollIntoView({block: 'nearest', inline: 'nearest'});
+        const target = transactionRef(rows[0]);
         setSurface(
           isCellEditorField(field)
-            ? {kind: 'cell', id, field, anchor}
-            : {kind: 'inline', id, field},
+            ? {kind: 'cell', id: target, field, anchor}
+            : {kind: 'inline', id: target, field},
         );
         return;
       }
     }
 
-    open({kind: 'edit', field, ids: rows.map(row => row.id)});
+    open({kind: 'edit', field, ids: rows.map(transactionRef)});
   }
 
   function closeCellEditor(restoreRowFocus: boolean) {
@@ -341,8 +346,9 @@ function Workspace({
 
     setSurface(current => (current === cellEditor ? undefined : current));
     if (restoreRowFocus) {
-      pendingFocus.current = () =>
-        grid.rowElement(cellEditor.id) ?? commandButton.current;
+      pendingFocus.current = rows =>
+        grid.rowElement(rows.find(row => transactionRef(row) === cellEditor.id)?.id) ??
+        commandButton.current;
     }
   }
 
@@ -369,17 +375,14 @@ function Workspace({
           close();
         }
 
-        if (edit.group.kind === 'group') {
+        if (edit.group.kind === 'group' && edit.group.output) {
           if (palette) {
             restorePaletteOrigin.current = false;
           }
 
-          const members = selectedRows.flatMap(row =>
-            row.is_group_parent ? (row.children ?? []).map(child => child.id) : [row.id],
-          );
+          const {ref} = edit.group.output;
           pendingFocus.current = rows =>
-            grid.rowElement(rows.find(row => hasGroupMembers(row, members))?.id) ??
-            restoreFocus();
+            grid.rowElement(rows.find(row => row.groupRef === ref)?.id) ?? restoreFocus();
         }
 
         edits.save({
@@ -578,13 +581,13 @@ function Workspace({
       return selectedRows;
     }
     return palette
-      ? visible.filter(row => row.id === palette.origin.rowId)
+      ? visible.filter(row => transactionRef(row) === palette.origin.target)
       : focusedRow
         ? [focusedRow]
         : [];
   }
 
-  const actionRows = commandTargets().filter(row => !isGroupPreview(row));
+  const actionRows = commandTargets().filter(canEditRow);
   const commandItems = readyForEdit
     ? [
         ...transactionCommands(
@@ -640,7 +643,9 @@ function Workspace({
       }
     }
     if (restore) {
-      pendingFocus.current = () => grid.rowElement(id) ?? commandButton.current;
+      pendingFocus.current = rows =>
+        grid.rowElement(rows.find(row => transactionRef(row) === id)?.id) ??
+        commandButton.current;
     }
   }
 
@@ -790,7 +795,7 @@ function Workspace({
           ref={commandButton}
           onMouseDown={event => {
             // Keep the focused row as the palette origin when opening with the mouse.
-            if (event.button === 0 && focusedRow) {
+            if (event.button === 0 && gridKeys && focusedRow) {
               event.preventDefault();
             }
           }}

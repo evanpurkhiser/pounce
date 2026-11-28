@@ -14,7 +14,7 @@ import {
   X,
 } from 'lucide-react';
 
-import {isGroupPreview, type Choice, type Row} from '../data/api';
+import {isGroupPreview, newGroupRef, type Choice, type Row} from '../data/api';
 import {canGroupSelection, type GroupEdit} from '../data/transactionGroups';
 import type {CommandItem} from '../ui/commandSearch';
 import {shortcuts} from '../ui/shortcuts';
@@ -241,7 +241,24 @@ export function groupCommands(
       shortcut: shortcuts[kind],
       label,
       icon,
-      invoke: () =>
-        save({label: completion, group: {kind, ids: targets.map(row => row.id)}}),
+      invoke: () => {
+        const ids = targets.map(row => row.id);
+        const group =
+          kind === 'group'
+            ? {
+                kind,
+                ids,
+                output: {
+                  ref: newGroupRef(),
+                  members: targets.flatMap(row =>
+                    row.is_group_parent
+                      ? (row.children ?? []).map(child => child.id)
+                      : [row.id],
+                  ),
+                },
+              }
+            : {kind, ids};
+        save({label: completion, group});
+      },
     }));
 }

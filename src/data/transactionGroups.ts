@@ -1,16 +1,26 @@
-import {isGroupPreview, type DataSource, type Group, type Row} from './api';
+import {
+  isGroupPreview,
+  newGroupRef,
+  type DataSource,
+  type Group,
+  type GroupRef,
+  type Row,
+} from './api';
 import {equalField, type EditKind, type WriteIssue} from './editChanges';
 
-type GroupIntent = {kind: 'group' | 'ungroup'; ids: number[]};
-type GroupChange = {kind: 'membership'; before: Group[]; after: Group[]};
+type GroupIntent =
+  | {kind: 'group'; ids: number[]; output?: {ref: GroupRef; members: number[]}}
+  | {kind: 'ungroup'; ids: number[]};
+type GroupSnapshot = Group & {ref?: GroupRef};
+type GroupChange = {kind: 'membership'; before: GroupSnapshot[]; after: GroupSnapshot[]};
 export type GroupEdit = {
   label: string;
   group: GroupIntent | GroupChange;
   selection?: string[];
 };
 type GroupState = {members: Row[]; parents: Row[]};
-type GroupPlan = {initial: GroupState; before: Group[]; target: Group[]};
-type GroupWrites = {removing: Row[]; creating: Group[]};
+type GroupPlan = {initial: GroupState; before: GroupSnapshot[]; target: GroupSnapshot[]};
+type GroupWrites = {removing: Row[]; creating: GroupSnapshot[]};
 type GroupWriteResult = {parents: Row[]; issues: WriteIssue[]};
 type GroupWriteOutcome = {history: Row[]; visible: GroupState; issues: WriteIssue[]};
 
@@ -79,8 +89,19 @@ function sameGroups(a: Group[], b: Group[]) {
   );
 }
 
-function describe(parents: Row[]) {
-  return parents.map(row => groupDetails(row, membersOf(row)));
+export function hasGroupMembers(row: Row, ids: number[]) {
+  return (
+    row.is_group_parent &&
+    row.children?.length === ids.length &&
+    row.children.every(child => ids.includes(child.id))
+  );
+}
+
+function describe(
+  parents: Row[],
+  refFor?: (row: Row) => GroupRef | undefined,
+): GroupSnapshot[] {
+  return parents.map(row => ({...groupDetails(row, membersOf(row)), ref: refFor?.(row)}));
 }
 
 async function readRows(source: DataSource, ids: number[]) {
@@ -147,8 +168,10 @@ async function readMembers(source: DataSource, parents: Row[]) {
 
 async function planIntent(
   source: DataSource,
-  {kind, ids}: GroupIntent,
+  intent: GroupIntent,
+  bindings: ReadonlyMap<number, GroupRef>,
 ): Promise<GroupPlan> {
+  const {kind, ids} = intent;
   const selected = await readRows(source, ids);
   const parents = selected.filter(row => row.is_group_parent);
   if (kind === 'ungroup' && !parents.length) {
@@ -160,7 +183,7 @@ async function planIntent(
   }
 
   const grouped = await readMembers(source, parents);
-  const before = describe(parents);
+  const before = describe(parents, row => bindings.get(row.id) ?? newGroupRef());
   if (kind === 'ungroup') {
     return {initial: {members: grouped, parents}, before, target: []};
   }
@@ -169,7 +192,7 @@ async function planIntent(
   return {
     initial: {members, parents},
     before,
-    target: [groupTarget(members, parents[0])],
+    target: [{...groupTarget(members, parents[0]), ref: intent.output?.ref}],
   };
 }
 
@@ -182,7 +205,10 @@ async function planReplay(
     kind === 'undo' ? [edit.after, edit.before] : [edit.before, edit.after];
   const ids = [...new Set([...expected, ...target].flatMap(group => group.ids))];
   const initial = await readState(source, ids);
-  const before = describe(initial.parents);
+  const before = describe(
+    initial.parents,
+    row => expected.find(group => hasGroupMembers(row, group.ids))?.ref,
+  );
   if (!sameGroups(before, expected)) {
     throw new Error('The transaction groups changed in Lunch Money.');
   }
@@ -217,7 +243,7 @@ function planWrites({initial, before, target}: GroupPlan): GroupWrites {
   return {removing, creating};
 }
 
-async function createGroup(source: DataSource, group: Group) {
+async function createGroup(source: DataSource, {ref: _ref, ...group}: GroupSnapshot) {
   const parent = await source.group(group);
   const confirmed = membersOf(parent);
   if (
@@ -289,8 +315,8 @@ async function reconcileWrite(
 
 function membershipChange(
   kind: EditKind,
-  from: Group[],
-  to: Group[],
+  from: GroupSnapshot[],
+  to: GroupSnapshot[],
 ): GroupChange | undefined {
   if (sameGroups(from, to)) {
     return undefined;
@@ -306,7 +332,10 @@ function groupReceipt(
   writtenParents: Row[],
   {history, visible, issues}: GroupWriteOutcome,
 ) {
-  const after = describe(history);
+  const snapshots = [...target, ...before];
+  const withRefs = (row: Row) =>
+    snapshots.find(group => hasGroupMembers(row, group.ids))?.ref;
+  const after = describe(history, withRefs);
   const visibleIds = new Set(visible.parents.map(row => row.id));
   const previousIds = new Set([...initial.parents, ...writtenParents].map(row => row.id));
   return {
@@ -314,6 +343,10 @@ function groupReceipt(
     remaining: membershipChange(kind, after, target),
     removedParentIds: [...previousIds].filter(id => !visibleIds.has(id)),
     rows: [...visible.members, ...visible.parents],
+    bindings: history.flatMap(row => {
+      const ref = withRefs(row);
+      return ref && visibleIds.has(row.id) ? [[row.id, ref] as const] : [];
+    }),
     issues,
   };
 }
@@ -322,11 +355,12 @@ export async function persistGroupEdit(
   source: DataSource,
   edit: GroupEdit['group'],
   kind: EditKind,
+  bindings: ReadonlyMap<number, GroupRef>,
 ) {
   const plan =
     edit.kind === 'membership'
       ? await planReplay(source, edit, kind)
-      : await planIntent(source, edit);
+      : await planIntent(source, edit, bindings);
   const written = await writeGroups(source, plan.initial, planWrites(plan));
   const outcome = await reconcileWrite(source, plan, written);
   return groupReceipt(kind, plan, written.parents, outcome);

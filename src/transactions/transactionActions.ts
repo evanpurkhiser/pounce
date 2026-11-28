@@ -10,7 +10,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-import {isGroupPreview, type Row} from '../data/api';
+import {canEditRow, type Row, type TransactionRef} from '../data/api';
 
 export type Field = 'category' | 'payee' | 'date' | 'note' | 'tags';
 
@@ -63,7 +63,7 @@ export const reviewStatuses = ['reviewed', 'unreviewed'] as const;
 export function reviewTargets(rows: Row[], status: ReviewStatus) {
   return rows.filter(
     row =>
-      !isGroupPreview(row) &&
+      canEditRow(row) &&
       row.status !== status &&
       !row.is_pending &&
       row.status !== 'delete_pending',
@@ -80,7 +80,7 @@ export const transactionCountLabel = (count: number) =>
 export type InlineEditorField = Extract<Field, 'payee' | 'note'>;
 export type CellEditorField = Exclude<Field, InlineEditorField>;
 
-export function cellEditorTriggerId(field: CellEditorField, id: number) {
+export function cellEditorTriggerId(field: CellEditorField, id: TransactionRef) {
   return `edit-${field}-${id}`;
 }
 

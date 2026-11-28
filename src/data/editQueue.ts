@@ -1,4 +1,4 @@
-import type {Row} from './api';
+import type {GroupRef, Row, TransactionRef} from './api';
 import {
   editUpdate,
   resolvePatch,
@@ -9,17 +9,21 @@ import {
 import {projectGroupRows} from './groupProjection';
 import type {GroupEdit} from './transactionGroups';
 
-export type QueuedEdit = Edit | GroupEdit;
+export type QueuedEdit = Edit<TransactionRef> | GroupEdit;
 type Entry = {kind: 'edit'; id: symbol; edit: QueuedEdit};
 type Save = {kind: 'save'; entry: Entry};
 type Job = Save | {kind: 'undo' | 'redo'; entry: Entry};
 type Redo = Entry | Save;
 type History = {undo: Entry[]; redo: Redo[]};
 type Phase = {kind: 'idle'} | {kind: 'writing'; job: Job} | {kind: 'recovering'};
-export type EditResult = {
-  applied?: QueuedEdit;
-  remaining?: QueuedEdit;
+export type EditResult<T extends QueuedEdit = QueuedEdit> = {
+  applied?: T;
+  remaining?: T;
   savedCount?: number;
+  groupBindings?: {
+    removed: number[];
+    confirmed: ReadonlyArray<readonly [number, GroupRef]>;
+  };
   issues: WriteIssue[];
 };
 type Completion = {kind: EditKind; label: string; result: EditResult};
@@ -33,6 +37,7 @@ type State = {
   queued: Job[];
   history: History;
   issues: EditIssue[];
+  bindings: ReadonlyMap<number, GroupRef>;
   completion?: Completion;
 };
 
@@ -45,8 +50,12 @@ type Event =
   | {type: 'clearIssues'};
 
 type Adapter = {
-  persist(edit: QueuedEdit, kind: EditKind): Promise<EditResult>;
-  recover(edit: QueuedEdit): Promise<WriteIssue[]>;
+  persist(
+    edit: QueuedEdit,
+    kind: EditKind,
+    bindings: State['bindings'],
+  ): Promise<EditResult>;
+  recover(edit: QueuedEdit, bindings: State['bindings']): Promise<WriteIssue[]>;
 };
 
 const idle: Phase = {kind: 'idle'};
@@ -55,6 +64,7 @@ const initialState: State = {
   queued: [],
   history: {undo: [], redo: []},
   issues: [],
+  bindings: new Map(),
 };
 
 export function pendingJobs(phase: Phase, queued: Job[]) {
@@ -106,7 +116,14 @@ export function projectRows(
   queued: Job[],
   rows: Row[],
   baseCurrency?: Row['currency'],
+  bindings?: State['bindings'],
 ) {
+  if (bindings?.size) {
+    rows = rows.map(row => {
+      const groupRef = bindings.get(row.id);
+      return groupRef ? {...row, groupRef} : row;
+    });
+  }
   const jobs = pendingJobs(phase, queued);
   if (!jobs.length) {
     return rows;
@@ -139,11 +156,14 @@ export function projectRows(
 }
 
 function projectFieldRows(jobs: Job[], rows: Row[]) {
+  const ids = new Map(
+    rows.flatMap(row => (row.groupRef ? [[row.groupRef, row.id] as const] : [])),
+  );
   const updates = Map.groupBy(
     jobs.flatMap(({kind, entry: {edit}}) =>
       'changes' in edit ? edit.changes.map(change => editUpdate(change, kind)) : [],
     ),
-    ({id}) => id,
+    ({id}) => (typeof id === 'number' ? id : ids.get(id)),
   );
 
   return rows.map(
@@ -220,6 +240,22 @@ function applyResult(
   };
 }
 
+function applyGroupBindings(
+  bindings: State['bindings'],
+  result?: EditResult['groupBindings'],
+): State['bindings'] {
+  if (!result) {
+    return bindings;
+  }
+
+  const removed = new Set(result.removed);
+  const confirmed = new Set(result.confirmed.map(([, ref]) => ref));
+  return new Map([
+    ...[...bindings].filter(([id, ref]) => !removed.has(id) && !confirmed.has(ref)),
+    ...result.confirmed,
+  ]);
+}
+
 function transition(state: State, event: Event): State {
   switch (event.type) {
     case 'save':
@@ -240,9 +276,10 @@ function transition(state: State, event: Event): State {
     case 'settled': {
       const {job, result} = event;
       const next = applyResult(state, event);
+      const bindings = applyGroupBindings(state.bindings, result.groupBindings);
       const completion = {kind: job.kind, label: job.entry.edit.label, result};
       if (!result.issues.length) {
-        return {...state, ...next, phase: idle, completion};
+        return {...state, ...next, phase: idle, completion, bindings};
       }
 
       const discarded = state.queued.length;
@@ -260,6 +297,7 @@ function transition(state: State, event: Event): State {
         },
         issues,
         completion,
+        bindings,
       };
     }
     case 'recovered':
@@ -296,14 +334,14 @@ export function createEditQueue(adapter: Adapter) {
       dispatch({type: 'started', job});
 
       const result = await adapter
-        .persist(edit, job.kind)
+        .persist(edit, job.kind, state.bindings)
         .catch((error: unknown): EditResult => ({
           issues: [{kind: 'unexpectedFailure', error}],
         }));
       dispatch({type: 'settled', job, result, splitId: Symbol()});
       if (result.issues.length) {
         const issues = await adapter
-          .recover(edit)
+          .recover(edit, state.bindings)
           .catch((error: unknown): WriteIssue[] => [{kind: 'unexpectedFailure', error}]);
         dispatch({type: 'recovered', issues});
       }

@@ -313,6 +313,7 @@ test('loads a connected budget, handles API errors, and restores the connection 
 async function openWithPausedWrites(page: Page, failAt?: number, source = demoSource()) {
   const requests: string[] = [];
   const responses: Array<(value: void) => void> = [];
+  const updates: Array<{id: number; patch: Patch}> = [];
   await page.addInitScript(() =>
     localStorage.setItem('pounce.lunchMoneyToken', 'test-only-token'),
   );
@@ -325,8 +326,11 @@ async function openWithPausedWrites(page: Page, failAt?: number, source = demoSo
     const id = Number(path.split('/')[2]);
     if (path === '/transactions/group' && request.method() === 'POST') {
       const group: Group = request.postDataJSON();
-      requests.push('group');
+      const index = requests.push('group') - 1;
       await new Promise<void>(resolve => responses.push(resolve));
+      if (index === failAt) {
+        return json({message: 'Fixture rejected the group'}, 400);
+      }
       return json(await source.group(group), 201);
     }
 
@@ -337,7 +341,8 @@ async function openWithPausedWrites(page: Page, failAt?: number, source = demoSo
 
     if (request.method() === 'PUT') {
       const patch: Patch = request.postDataJSON();
-      const index = requests.push(patch.notes ?? '') - 1;
+      updates.push({id, patch});
+      const index = requests.push(patch.notes ?? patch.payee ?? '') - 1;
       await new Promise<void>(resolve => responses.push(resolve));
       if (index === failAt) {
         return json({message: 'Fixture rejected the queued edit'}, 400);
@@ -375,6 +380,7 @@ async function openWithPausedWrites(page: Page, failAt?: number, source = demoSo
   const note = first.locator('[data-editor-cell=note]');
   return {
     requests,
+    updates,
     note,
     async changeNote(value: string) {
       await first.focus();
@@ -484,6 +490,117 @@ test('undo restores group selection while the group is still saving', async ({pa
   await expect(page.getByText('Undo complete', {exact: true})).toBeVisible();
   await expect(first.getByRole('checkbox')).toBeChecked();
   await expect(second.getByRole('checkbox')).toBeChecked();
+});
+
+test('queued group edits survive confirmation, undo, and recreation', async ({page}) => {
+  const {finishWrite, requests, updates} = await openWithPausedWrites(page);
+  const first = page.locator('[data-row-id="1"]');
+  const group = page.getByRole('row').filter({
+    has: page.getByText('$14.67', {exact: true}),
+  });
+  const payee = group.locator('[data-editor-cell=payee]');
+  for (const id of [1, 2]) {
+    await page.locator(`[data-row-id="${id}"]`).getByRole('checkbox').check();
+  }
+  await first.focus();
+  await page.keyboard.press('ControlOrMeta+g');
+  await expect(group).toHaveAttribute('data-row-id', '-1');
+  await expect(group).toBeFocused();
+  await page.keyboard.press('P');
+  await payee.getByRole('combobox', {name: 'Payee'}).fill('Group merchant');
+  await page.keyboard.press('Enter');
+  await expect(payee).toHaveText('Group merchant');
+  await expect.poll(() => requests).toEqual(['group']);
+
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(payee).toHaveText('MUD Coffee');
+  await page.keyboard.press('ControlOrMeta+Shift+z');
+  await expect(payee).toHaveText('Group merchant');
+
+  await finishWrite(0);
+  await expect(group).toHaveAttribute('data-row-id', /^[0-9]+$/);
+  const originalId = Number(await group.getAttribute('data-row-id'));
+  await expect
+    .poll(() => updates)
+    .toEqual([{id: originalId, patch: {payee: 'Group merchant'}}]);
+  await finishWrite(1);
+  await expect(page.getByText('10 transactions', {exact: true})).toBeVisible();
+
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(payee).toHaveText('MUD Coffee');
+  await finishWrite(2);
+  await expect(page.getByText('10 transactions', {exact: true})).toBeVisible();
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(first).toBeVisible();
+  await expect(page.getByText('11 transactions', {exact: true})).toBeVisible();
+
+  await page.keyboard.press('ControlOrMeta+Shift+z');
+  await expect(group).toHaveAttribute('data-row-id', '-1');
+  await page.keyboard.press('ControlOrMeta+Shift+z');
+  await expect(payee).toHaveText('Group merchant');
+  await finishWrite(3);
+  await expect(group).toHaveAttribute('data-row-id', /^[0-9]+$/);
+  const recreatedId = Number(await group.getAttribute('data-row-id'));
+  expect(recreatedId).not.toBe(originalId);
+  await expect
+    .poll(() => updates.at(-1))
+    .toEqual({id: recreatedId, patch: {payee: 'Group merchant'}});
+  await finishWrite(4);
+  await expect(page.getByText('10 transactions', {exact: true})).toBeVisible();
+  await expect(payee).toHaveText('Group merchant');
+});
+
+test('a group payee draft stays open through confirmation', async ({page}) => {
+  const {finishWrite, updates} = await openWithPausedWrites(page);
+  const first = page.locator('[data-row-id="1"]');
+  for (const id of [1, 2]) {
+    await page.locator(`[data-row-id="${id}"]`).getByRole('checkbox').check();
+  }
+  await first.focus();
+  await page.keyboard.press('ControlOrMeta+g');
+  const group = page.getByRole('row').filter({
+    has: page.getByText('$14.67', {exact: true}),
+  });
+  await expect(group).toBeFocused();
+  await page.keyboard.press('P');
+  const input = group.getByRole('combobox', {name: 'Payee'});
+  await input.fill('Draft merchant');
+
+  await finishWrite(0);
+  await expect(group).toHaveAttribute('data-row-id', /^[0-9]+$/);
+  await expect(input).toHaveValue('Draft merchant');
+  await expect(input).toBeFocused();
+
+  await page.keyboard.press('Enter');
+  const id = Number(await group.getAttribute('data-row-id'));
+  await expect.poll(() => updates).toEqual([{id, patch: {payee: 'Draft merchant'}}]);
+  await finishWrite(1);
+  await expect(
+    group.getByRole('button', {name: 'Edit payee for Draft merchant'}),
+  ).toBeVisible();
+});
+
+test('a rejected group rolls back its queued payee edit', async ({page}) => {
+  const {finishWrite, requests} = await openWithPausedWrites(page, 0);
+  const first = page.locator('[data-row-id="1"]');
+  for (const id of [1, 2]) {
+    await page.locator(`[data-row-id="${id}"]`).getByRole('checkbox').check();
+  }
+  await first.focus();
+  await page.keyboard.press('ControlOrMeta+g');
+  const preview = page.locator('[data-row-id="-1"]');
+  await expect(preview).toBeFocused();
+  await page.keyboard.press('P');
+  await preview.getByRole('combobox', {name: 'Payee'}).fill('Group merchant');
+  await page.keyboard.press('Enter');
+  await expect(preview.locator('[data-editor-cell=payee]')).toHaveText('Group merchant');
+
+  await finishWrite(0);
+  await expect(first.locator('[data-editor-cell=payee]')).toHaveText('MUD Coffee');
+  await expect(
+    page.getByText('1 queued edit was discarded.', {exact: true}),
+  ).toBeVisible();
+  expect(requests).toEqual(['group']);
 });
 
 test('undo and redo edit the queue before making another request', async ({page}) => {
