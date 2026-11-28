@@ -389,7 +389,7 @@ const TransactionRow = memo(function TransactionRow({
       typeof value === 'string' ? <span title={value || undefined}>{value}</span> : value;
 
     if (isGroupPreview(transaction)) {
-      return content;
+      return <span className={styles.cellContent}>{content}</span>;
     }
 
     if (isCellEditorField(field)) {
@@ -397,7 +397,7 @@ const TransactionRow = memo(function TransactionRow({
         <Popover.Trigger
           handle={cellEditorHandle}
           id={cellEditorTriggerId(field, id)}
-          className={styles.cellAction}
+          className={`${styles.cellContent} ${styles.cellAction}`}
           data-grid-control
           tabIndex={-1}
           aria-label={name}
@@ -410,7 +410,7 @@ const TransactionRow = memo(function TransactionRow({
     return (
       <button
         type="button"
-        className={styles.cellAction}
+        className={`${styles.cellContent} ${styles.cellAction}`}
         data-grid-control
         tabIndex={-1}
         aria-label={name}

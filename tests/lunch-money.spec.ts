@@ -429,6 +429,9 @@ test('a projected group follows the table sort and keeps its position on confirm
   const {finishWrite} = await openWithPausedWrites(page, undefined, source);
   const displayed = page.locator('tbody tr[data-row-id]');
   const group = displayed.filter({has: page.getByText('$14.67', {exact: true})});
+  const dateText = group
+    .locator('[data-editor-cell=date]')
+    .getByText(date, {exact: true});
   for (const id of [1, 2]) {
     await page.locator(`[data-row-id="${id}"]`).getByRole('checkbox').check();
   }
@@ -450,8 +453,13 @@ test('a projected group follows the table sort and keeps its position on confirm
   await expect(displayed.first()).toHaveAttribute('data-row-id', '3');
   await expect(displayed.nth(1)).toContainText('$14.67');
 
+  const projectedDate = await dateText.boundingBox();
+  expect(projectedDate).not.toBeNull();
+
   await finishWrite(0);
   await expect(group).toHaveAttribute('data-row-id', /^[0-9]+$/);
+  const confirmedDate = await dateText.boundingBox();
+  expect(confirmedDate?.x).toBe(projectedDate?.x);
   await expect(displayed.first()).toHaveAttribute('data-row-id', '3');
   await expect(displayed.nth(1)).toContainText('$14.67');
 });
