@@ -4,6 +4,7 @@ import {
   shiftMonth,
   type DataSource,
   type Metadata,
+  type Range,
   type Row,
 } from './api';
 
@@ -88,17 +89,17 @@ export function demoSource(): DataSource {
       })),
   );
   let nextId = Math.max(...rows.map(row => row.id)) + 1;
+  const visibleRows = (range: Range) =>
+    rows.filter(
+      row => typeof row.group_parent_id !== 'number' && inRange(row.date, range),
+    );
 
   return {
     async metadata() {
       return metadata;
     },
     async transactionsPage(range) {
-      return {
-        rows: rows.filter(
-          row => typeof row.group_parent_id !== 'number' && inRange(row.date, range),
-        ),
-      };
+      return {rows: visibleRows(range)};
     },
     async get(id) {
       const row = rows.find(item => item.id === id);
@@ -128,6 +129,9 @@ export function demoSource(): DataSource {
       });
       const total = children.reduce((sum, row) => sum + row.to_base, 0);
       const category = children[0].category_id;
+      const sharedCategory = children.every(row => row.category_id === category)
+        ? category
+        : null;
       const parent: Row = {
         ...children[0],
         id,
@@ -136,12 +140,7 @@ export function demoSource(): DataSource {
         original_name: null,
         amount: total.toFixed(4),
         to_base: total,
-        category_id:
-          category_id === undefined
-            ? children.every(row => row.category_id === category)
-              ? category
-              : null
-            : category_id,
+        category_id: category_id === undefined ? sharedCategory : category_id,
         notes: notes ?? null,
         status: status ?? 'reviewed',
         tag_ids: tag_ids ?? [],
@@ -165,19 +164,15 @@ export function demoSource(): DataSource {
         .map(row => (row.group_parent_id === id ? {...row, group_parent_id: null} : row));
     },
     async summary(range) {
+      const visible = visibleRows(range);
       return {
         aligned: true,
         categories: [1, 2, 3, 4, 5, 6].map(category_id => ({
           category_id,
           totals: {
             budgeted: category_id === 6 ? null : category_id === 2 ? 350 : 150,
-            other_activity: rows
-              .filter(
-                row =>
-                  typeof row.group_parent_id !== 'number' &&
-                  row.category_id === category_id &&
-                  inRange(row.date, range),
-              )
+            other_activity: visible
+              .filter(row => row.category_id === category_id)
               .reduce((total, row) => total + row.to_base, 0),
             recurring_activity: 0,
             recurring_remaining: 0,
