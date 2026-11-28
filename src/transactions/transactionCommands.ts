@@ -216,35 +216,31 @@ export function groupCommands(
   rows: Row[],
   save: (edit: GroupEdit) => void,
 ): CommandItem[] {
-  const commands: CommandItem[] = [];
-  if (rows.length >= 2 && rows.every(canGroupTransaction)) {
-    commands.push({
-      id: 'group',
-      group: 'Transactions',
+  const actions = [
+    {
+      kind: 'group',
       label: 'Group transactions',
+      completion: 'Grouped transactions',
       icon: Group,
-      invoke: () =>
-        save({
-          label: 'Grouped transactions',
-          group: {kind: 'group', ids: rows.map(row => row.id)},
-        }),
-    });
-  }
-
-  const parents = rows.filter(row => row.is_group_parent);
-  if (parents.length) {
-    commands.push({
-      id: 'ungroup',
-      group: 'Transactions',
+      targets: rows.length >= 2 && rows.every(canGroupTransaction) ? rows : [],
+    },
+    {
+      kind: 'ungroup',
       label: 'Ungroup transactions',
+      completion: 'Ungrouped transactions',
       icon: Ungroup,
-      invoke: () =>
-        save({
-          label: 'Ungrouped transactions',
-          group: {kind: 'ungroup', ids: parents.map(row => row.id)},
-        }),
-    });
-  }
+      targets: rows.filter(row => row.is_group_parent),
+    },
+  ] as const;
 
-  return commands;
+  return actions
+    .filter(({targets}) => targets.length > 0)
+    .map(({kind, label, completion, icon, targets}) => ({
+      id: kind,
+      group: 'Transactions',
+      label,
+      icon,
+      invoke: () =>
+        save({label: completion, group: {kind, ids: targets.map(row => row.id)}}),
+    }));
 }
