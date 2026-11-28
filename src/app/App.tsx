@@ -33,6 +33,7 @@ import {useTransactionPages} from '../data/useTransactionPages';
 import {RangeEditor} from '../editors/Editors';
 import {TransactionEditor, type RowPatch} from '../editors/TransactionEditor';
 import {Grid} from '../transactions/Grid';
+import {selectionKey} from '../transactions/selection';
 import {
   cellEditorTriggerId,
   editActions,
@@ -201,7 +202,13 @@ function Workspace({
   const inlineEditor = editorRow && rowEditor?.kind === 'inline' ? rowEditor : undefined;
   const cellEditor = editorRow && rowEditor?.kind === 'cell' ? rowEditor : undefined;
   const suspended = Boolean(palette) || Boolean(editorRow);
-  const grid = useTransactionGrid(visible, suspended, commandButton, metadata);
+  const grid = useTransactionGrid(
+    visible,
+    suspended,
+    commandButton,
+    metadata,
+    edits.restoringSelection,
+  );
   const {focusedRow, keyboardTargets, selectedRows} = grid;
 
   useLayoutEffect(() => {
@@ -375,9 +382,21 @@ function Workspace({
             restoreFocus();
         }
 
-        edits.save(edit);
+        edits.save({
+          ...edit,
+          selection:
+            edit.group.kind === 'group' ? selectedRows.map(selectionKey) : undefined,
+        });
       })
     : [];
+
+  function undo() {
+    const edit = edits.replay('undo');
+    if (edit && 'group' in edit && edit.selection) {
+      grid.restoreSelection(edit.selection);
+    }
+  }
+
   useHotkeys([
     {
       hotkey: shortcuts.commands,
@@ -386,7 +405,7 @@ function Workspace({
     },
     {
       hotkey: shortcuts.undo,
-      callback: () => edits.replay('undo'),
+      callback: undo,
       options: {enabled: edits.canUndo && !suspended},
     },
     {
@@ -540,7 +559,7 @@ function Workspace({
       ? [
           tableCommand('undo', () => {
             close();
-            edits.replay('undo');
+            undo();
           }),
         ]
       : []),
@@ -904,7 +923,7 @@ function Workspace({
                   : transactionCountLabel(visible.length)}
             </span>
             {edits.canUndo && (
-              <button type="button" onClick={() => edits.replay('undo')}>
+              <button type="button" onClick={undo}>
                 Undo
               </button>
             )}

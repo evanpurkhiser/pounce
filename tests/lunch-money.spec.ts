@@ -331,6 +331,11 @@ async function openWithPausedWrites(page: Page, failAt?: number) {
       return json(await source.group(group), 201);
     }
 
+    if (path.startsWith('/transactions/group/') && request.method() === 'DELETE') {
+      await source.ungroup(Number(path.split('/').at(-1)));
+      return route.fulfill({status: 204, headers: {'access-control-allow-origin': '*'}});
+    }
+
     if (request.method() === 'PUT') {
       const patch: Patch = request.postDataJSON();
       const index = requests.push(patch.notes ?? '') - 1;
@@ -415,6 +420,28 @@ for (const keepFocus of [true, false]) {
     },
   );
 }
+
+test('undo restores group selection while the group is still saving', async ({page}) => {
+  const {finishWrite, requests} = await openWithPausedWrites(page);
+  const first = page.locator('[data-row-id="1"]');
+  const second = page.locator('[data-row-id="2"]');
+  await first.getByRole('checkbox').check();
+  await second.getByRole('checkbox').check();
+  await first.focus();
+  await page.keyboard.press('ControlOrMeta+g');
+  await expect(page.locator('[data-row-id="-1"]')).toBeFocused();
+  await expect.poll(() => requests).toEqual(['group']);
+
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(first.getByRole('checkbox')).toBeChecked();
+  await expect(second.getByRole('checkbox')).toBeChecked();
+  await expect(page.getByText('Saving…', {exact: true})).toBeVisible();
+
+  await finishWrite(0);
+  await expect(page.getByText('Undo complete', {exact: true})).toBeVisible();
+  await expect(first.getByRole('checkbox')).toBeChecked();
+  await expect(second.getByRole('checkbox')).toBeChecked();
+});
 
 test('undo and redo edit the queue before making another request', async ({page}) => {
   const {requests, note, changeNote, finishWrite} = await openWithPausedWrites(page);

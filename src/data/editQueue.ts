@@ -38,7 +38,7 @@ type State = {
 
 type Event =
   | {type: 'save'; entry: Entry}
-  | {type: 'replay'; direction: 'undo' | 'redo'}
+  | {type: 'replay'; direction: 'undo' | 'redo'; item: Redo}
   | {type: 'started'; job: Job}
   | {type: 'settled'; job: Job; result: EditResult; splitId: symbol}
   | {type: 'recovered'; issues: WriteIssue[]}
@@ -57,7 +57,7 @@ const initialState: State = {
   issues: [],
 };
 
-function pendingJobs(phase: Phase, queued: Job[]) {
+export function pendingJobs(phase: Phase, queued: Job[]) {
   return phase.kind === 'writing' ? [phase.job, ...queued] : queued;
 }
 
@@ -158,7 +158,7 @@ function projectFieldRows(jobs: Job[], rows: Row[]) {
   );
 }
 
-function queueReplay(state: State, direction: 'undo' | 'redo'): State {
+function queueReplay(state: State, direction: 'undo' | 'redo', item: Redo): State {
   const {history, queued} = state;
   const tail = queued.at(-1);
   if (direction === 'undo' && tail?.kind === 'save') {
@@ -169,26 +169,22 @@ function queueReplay(state: State, direction: 'undo' | 'redo'): State {
     };
   }
 
-  const entry = projectedHistory(state)[direction].at(-1);
-  if (!entry) {
-    return state;
-  }
-  if (isDraft(entry)) {
+  if (isDraft(item)) {
     return {
       ...state,
-      history: {...history, redo: history.redo.filter(item => item !== entry)},
-      queued: [...queued, entry],
+      history: {...history, redo: history.redo.filter(draft => draft !== item)},
+      queued: [...queued, item],
     };
   }
   if (
     tail &&
     tail.kind !== 'save' &&
     tail.kind !== direction &&
-    tail.entry.id === entry.id
+    tail.entry.id === item.id
   ) {
     return {...state, queued: queued.slice(0, -1)};
   }
-  return {...state, queued: [...queued, {kind: direction, entry}]};
+  return {...state, queued: [...queued, {kind: direction, entry: item}]};
 }
 
 function applyResult(
@@ -233,7 +229,7 @@ function transition(state: State, event: Event): State {
         history: {...state.history, redo: []},
       };
     case 'replay':
-      return queueReplay(state, event.direction);
+      return queueReplay(state, event.direction, event.item);
     case 'started':
       return {
         ...state,
@@ -329,8 +325,14 @@ export function createEditQueue(adapter: Adapter) {
       }
     },
     replay(direction: 'undo' | 'redo') {
-      dispatch({type: 'replay', direction});
+      const item = projectedHistory(state)[direction].at(-1);
+      if (!item) {
+        return;
+      }
+
+      dispatch({type: 'replay', direction, item});
       void drain();
+      return (isDraft(item) ? item.entry : item).edit;
     },
     clearIssues: () => dispatch({type: 'clearIssues'}),
   };

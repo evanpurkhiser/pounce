@@ -3,7 +3,11 @@ import {equalField, type EditKind, type WriteIssue} from './editChanges';
 
 type GroupIntent = {kind: 'group' | 'ungroup'; ids: number[]};
 type GroupChange = {kind: 'membership'; before: Group[]; after: Group[]};
-export type GroupEdit = {label: string; group: GroupIntent | GroupChange};
+export type GroupEdit = {
+  label: string;
+  group: GroupIntent | GroupChange;
+  selection?: string[];
+};
 type GroupState = {members: Row[]; parents: Row[]};
 type GroupPlan = {initial: GroupState; before: Group[]; target: Group[]};
 type GroupWrites = {removing: Row[]; creating: Group[]};

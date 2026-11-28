@@ -1635,8 +1635,8 @@ test('groups selected transactions from the palette and restores them with undo'
   await expect(group).toBeFocused();
 
   await page.keyboard.press('ControlOrMeta+z');
-  await expect(row(page, 1)).toBeVisible();
-  await expect(row(page, 2)).toBeVisible();
+  await expect(row(page, 1).getByRole('checkbox')).toBeChecked();
+  await expect(row(page, 2).getByRole('checkbox')).toBeChecked();
 
   await page.keyboard.press('ControlOrMeta+Shift+z');
   await expect(row(page, 1)).toHaveCount(0);
@@ -1759,9 +1759,13 @@ test('merges selected groups and individual transactions as one undoable edit', 
 
   await page.keyboard.press('ControlOrMeta+z');
   await expect(merged).toHaveCount(0);
-  await expect(row(page, 5)).toBeVisible();
+  await expect(row(page, 5).getByRole('checkbox')).toBeChecked();
   for (const group of originals) {
-    await expect(group).toBeVisible();
+    await expect(group.getByRole('checkbox')).toBeChecked();
+  }
+  await expect(page.getByText('9 transactions', {exact: true})).toBeVisible();
+  for (const group of originals) {
+    await expect(group.getByRole('checkbox')).toBeChecked();
   }
 
   await page.keyboard.press('ControlOrMeta+Shift+z');
