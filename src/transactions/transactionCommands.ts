@@ -14,7 +14,7 @@ import {
   X,
 } from 'lucide-react';
 
-import type {Choice, Row} from '../data/api';
+import {isGroupPreview, type Choice, type Row} from '../data/api';
 import {canGroupSelection, type GroupEdit} from '../data/transactionGroups';
 import type {CommandItem} from '../ui/commandSearch';
 import {shortcuts} from '../ui/shortcuts';
@@ -229,7 +229,7 @@ export function groupCommands(
       label: 'Ungroup transactions',
       completion: 'Ungrouped transactions',
       icon: Ungroup,
-      targets: rows.filter(row => row.is_group_parent),
+      targets: rows.filter(row => row.is_group_parent && !isGroupPreview(row)),
     },
   ] as const;
 

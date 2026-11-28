@@ -1,7 +1,20 @@
+import type {Row} from '../data/api';
+
+export function selectionKey(row: Row): string {
+  if (row.is_group_parent && row.children?.length) {
+    return `group:${row.children
+      .map(child => child.id)
+      .sort((a, b) => a - b)
+      .join(',')}`;
+  }
+
+  return String(row.id);
+}
+
 export type Selection = {
-  independent: ReadonlySet<number>;
-  range: ReadonlySet<number>;
-  anchor?: number;
+  independent: ReadonlySet<string>;
+  range: ReadonlySet<string>;
+  anchor?: string;
 };
 
 export function emptySelection(): Selection {
@@ -12,7 +25,7 @@ export function selectedKeys(selection: Selection) {
   return new Set([...selection.independent, ...selection.range]);
 }
 
-export function toggleRow(selection: Selection, id: number): Selection {
+export function toggleRow(selection: Selection, id: string): Selection {
   const independent = selectedKeys(selection);
   if (independent.has(id)) {
     independent.delete(id);
@@ -22,7 +35,7 @@ export function toggleRow(selection: Selection, id: number): Selection {
   return {independent, range: new Set(), anchor: id};
 }
 
-export function restrictSelection(selection: Selection, visible: Set<number>): Selection {
+export function restrictSelection(selection: Selection, visible: Set<string>): Selection {
   const independent = new Set([...selection.independent].filter(id => visible.has(id)));
   const range = new Set([...selection.range].filter(id => visible.has(id)));
   const anchor =
@@ -41,9 +54,9 @@ export function restrictSelection(selection: Selection, visible: Set<number>): S
 
 export function selectRange(
   selection: Selection,
-  order: number[],
-  from: number,
-  to: number,
+  order: string[],
+  from: string,
+  to: string,
   moving: boolean,
 ): Selection {
   const anchor =

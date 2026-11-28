@@ -28,7 +28,7 @@ export type Metadata = {
   categories: Choice[];
   tags: TagChoice[];
   accounts: Choice[];
-  currency: string;
+  currency: Row['currency'];
   cadence: string;
 };
 export type Summary = Schema['summaryResponseObject'];
@@ -66,6 +66,7 @@ export const accountKey = (row: Row) =>
     : row.plaid_account_id
       ? `plaid:${row.plaid_account_id}`
       : 'cash';
+export const isGroupPreview = (row: Row) => row.id < 0;
 export const isSplitOrGrouped = (row: Row) =>
   row.is_split_parent ||
   typeof row.split_parent_id === 'number' ||
@@ -201,6 +202,7 @@ export function liveSource(apiKey: string): DataSource {
         start_date: range.start,
         end_date: range.end,
         include_pending: false,
+        include_children: true,
         limit,
         offset,
       });

@@ -1,6 +1,6 @@
 import {expect, test, type Page} from '@playwright/test';
 
-import {monthRange, currentMonth, type Patch} from '../src/data/api';
+import {monthRange, currentMonth, type Group, type Patch} from '../src/data/api';
 import {demoSource} from '../src/data/demo';
 
 test('loads a connected budget, handles API errors, and restores the connection after reload', async ({
@@ -310,8 +310,7 @@ test('loads a connected budget, handles API errors, and restores the connection 
   await expect(page.getByRole('button', {name: 'Connect Lunch Money'})).toBeVisible();
 });
 
-async function openWithPausedWrites(page: Page, failAt?: number) {
-  const source = demoSource();
+async function openWithPausedWrites(page: Page, failAt?: number, source = demoSource()) {
   const requests: string[] = [];
   const responses: Array<(value: void) => void> = [];
   await page.addInitScript(() =>
@@ -324,6 +323,18 @@ async function openWithPausedWrites(page: Page, failAt?: number) {
       route.fulfill({status, json: body, headers: {'access-control-allow-origin': '*'}});
     const range = monthRange(currentMonth());
     const id = Number(path.split('/')[2]);
+    if (path === '/transactions/group' && request.method() === 'POST') {
+      const group: Group = request.postDataJSON();
+      requests.push('group');
+      await new Promise<void>(resolve => responses.push(resolve));
+      return json(await source.group(group), 201);
+    }
+
+    if (path.startsWith('/transactions/group/') && request.method() === 'DELETE') {
+      await source.ungroup(Number(path.split('/').at(-1)));
+      return route.fulfill({status: 204, headers: {'access-control-allow-origin': '*'}});
+    }
+
     if (request.method() === 'PUT') {
       const patch: Patch = request.postDataJSON();
       const index = requests.push(patch.notes ?? '') - 1;
@@ -378,6 +389,102 @@ async function openWithPausedWrites(page: Page, failAt?: number) {
     },
   };
 }
+
+for (const keepFocus of [true, false]) {
+  test(
+    keepFocus
+      ? 'group confirmation keeps the group focused'
+      : 'group confirmation preserves focus moved to another row',
+    async ({page}) => {
+      const {finishWrite} = await openWithPausedWrites(page);
+      for (const id of [1, 2]) {
+        await page.locator(`[data-row-id="${id}"]`).getByRole('checkbox').check();
+      }
+      await page.locator('[data-row-id="1"]').focus();
+      await page.keyboard.press('ControlOrMeta+g');
+      const preview = page.locator('[data-row-id="-1"]');
+      await expect(preview).toBeFocused();
+      const other = page.locator('[data-row-id="3"]');
+      if (!keepFocus) {
+        await other.focus();
+      }
+
+      await finishWrite(0);
+      await expect(preview).toHaveCount(0);
+      const group = page.locator('[data-row-id]').filter({
+        has: page.getByText('$14.67', {exact: true}),
+      });
+      await expect(group).toBeVisible();
+      await expect(keepFocus ? group : other).toBeFocused();
+    },
+  );
+}
+
+test('a projected group follows the table sort and keeps its position on confirmation', async ({
+  page,
+}) => {
+  const source = demoSource();
+  const {date} = await source.get(1);
+  await source.update([{id: 3, patch: {date}}]);
+  const {finishWrite} = await openWithPausedWrites(page, undefined, source);
+  const displayed = page.locator('tbody tr[data-row-id]');
+  const group = displayed.filter({has: page.getByText('$14.67', {exact: true})});
+  const dateText = group
+    .locator('[data-editor-cell=date]')
+    .getByText(date, {exact: true});
+  for (const id of [1, 2]) {
+    await page.locator(`[data-row-id="${id}"]`).getByRole('checkbox').check();
+  }
+  await page.locator('[data-row-id="1"]').focus();
+  await page.keyboard.press('ControlOrMeta+g');
+
+  await expect(group).toHaveAttribute('data-row-id', '-1');
+  await expect(displayed.first()).toHaveAttribute('data-row-id', '3');
+  await expect(displayed.nth(1)).toContainText('$14.67');
+
+  const amount = page.getByRole('columnheader', {name: 'Amount', exact: true});
+  await amount.click();
+  await expect(amount).toHaveAttribute('aria-sort', 'ascending');
+  await expect(displayed.first()).toContainText('$14.67');
+
+  const dateColumn = page.getByRole('columnheader', {name: 'Date', exact: true});
+  await dateColumn.click();
+  await expect(dateColumn).toHaveAttribute('aria-sort', 'descending');
+  await expect(displayed.first()).toHaveAttribute('data-row-id', '3');
+  await expect(displayed.nth(1)).toContainText('$14.67');
+
+  const projectedDate = await dateText.boundingBox();
+  expect(projectedDate).not.toBeNull();
+
+  await finishWrite(0);
+  await expect(group).toHaveAttribute('data-row-id', /^[0-9]+$/);
+  const confirmedDate = await dateText.boundingBox();
+  expect(confirmedDate?.x).toBe(projectedDate?.x);
+  await expect(displayed.first()).toHaveAttribute('data-row-id', '3');
+  await expect(displayed.nth(1)).toContainText('$14.67');
+});
+
+test('undo restores group selection while the group is still saving', async ({page}) => {
+  const {finishWrite, requests} = await openWithPausedWrites(page);
+  const first = page.locator('[data-row-id="1"]');
+  const second = page.locator('[data-row-id="2"]');
+  await first.getByRole('checkbox').check();
+  await second.getByRole('checkbox').check();
+  await first.focus();
+  await page.keyboard.press('ControlOrMeta+g');
+  await expect(page.locator('[data-row-id="-1"]')).toBeFocused();
+  await expect.poll(() => requests).toEqual(['group']);
+
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(first.getByRole('checkbox')).toBeChecked();
+  await expect(second.getByRole('checkbox')).toBeChecked();
+  await expect(page.getByText('Saving…', {exact: true})).toBeVisible();
+
+  await finishWrite(0);
+  await expect(page.getByText('Undo complete', {exact: true})).toBeVisible();
+  await expect(first.getByRole('checkbox')).toBeChecked();
+  await expect(second.getByRole('checkbox')).toBeChecked();
+});
 
 test('undo and redo edit the queue before making another request', async ({page}) => {
   const {requests, note, changeNote, finishWrite} = await openWithPausedWrites(page);

@@ -23,7 +23,7 @@ import {
 } from '@tanstack/react-table';
 import {Check, Repeat2, Split} from 'lucide-react';
 
-import {money, type Metadata, type Row} from '../data/api';
+import {isGroupPreview, money, type Metadata, type Row} from '../data/api';
 import {NoteEditor, PayeeEditor} from '../editors/Editors';
 import {CheckboxIcon} from '../ui/CheckboxIcon';
 import ui from '../ui/ui.module.css';
@@ -388,12 +388,16 @@ const TransactionRow = memo(function TransactionRow({
     const content =
       typeof value === 'string' ? <span title={value || undefined}>{value}</span> : value;
 
+    if (isGroupPreview(transaction)) {
+      return <span className={styles.cellContent}>{content}</span>;
+    }
+
     if (isCellEditorField(field)) {
       return (
         <Popover.Trigger
           handle={cellEditorHandle}
           id={cellEditorTriggerId(field, id)}
-          className={styles.cellAction}
+          className={`${styles.cellContent} ${styles.cellAction}`}
           data-grid-control
           tabIndex={-1}
           aria-label={name}
@@ -406,7 +410,7 @@ const TransactionRow = memo(function TransactionRow({
     return (
       <button
         type="button"
-        className={styles.cellAction}
+        className={`${styles.cellContent} ${styles.cellAction}`}
         data-grid-control
         tabIndex={-1}
         aria-label={name}

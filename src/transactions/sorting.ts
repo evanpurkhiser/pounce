@@ -116,12 +116,20 @@ export function sortTransactions(
     compare: (a: Value, b: Value) => number,
   ) {
     return rows
-      .map(row => ({row, value: valueOf(row)}))
+      .map(row => ({
+        row,
+        value: valueOf(row),
+        // Group membership stays stable when a projected row receives its server ID.
+        orderId:
+          row.is_group_parent && row.children?.length
+            ? Math.max(...row.children.map(child => child.id))
+            : row.id,
+      }))
       .sort(
         (a, b) =>
           sign * compare(a.value, b.value) ||
           b.row.date.localeCompare(a.row.date) ||
-          b.row.id - a.row.id,
+          b.orderId - a.orderId,
       )
       .map(item => item.row);
   }

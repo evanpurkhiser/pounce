@@ -10,7 +10,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-import type {Row} from '../data/api';
+import {isGroupPreview, type Row} from '../data/api';
 
 export type Field = 'category' | 'payee' | 'date' | 'note' | 'tags';
 
@@ -62,7 +62,11 @@ export const reviewStatuses = ['reviewed', 'unreviewed'] as const;
 
 export function reviewTargets(rows: Row[], status: ReviewStatus) {
   return rows.filter(
-    row => row.status !== status && !row.is_pending && row.status !== 'delete_pending',
+    row =>
+      !isGroupPreview(row) &&
+      row.status !== status &&
+      !row.is_pending &&
+      row.status !== 'delete_pending',
   );
 }
 

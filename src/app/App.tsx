@@ -16,6 +16,7 @@ import {Toaster, toast} from 'sonner';
 import {Budget} from '../budget/Budget';
 import {
   currentMonth,
+  isGroupPreview,
   liveSource,
   monthLabel,
   monthRange,
@@ -25,12 +26,14 @@ import {
 } from '../data/api';
 import {demoSource} from '../data/demo';
 import {draftChange} from '../data/editChanges';
+import {hasGroupMembers} from '../data/groupProjection';
 import {createSession, message, type Session} from '../data/session';
 import {useEdits} from '../data/useEdits';
 import {useTransactionPages} from '../data/useTransactionPages';
 import {RangeEditor} from '../editors/Editors';
 import {TransactionEditor, type RowPatch} from '../editors/TransactionEditor';
 import {Grid} from '../transactions/Grid';
+import {selectionKey} from '../transactions/selection';
 import {
   cellEditorTriggerId,
   editActions,
@@ -156,7 +159,8 @@ function Workspace({
   const [budgetOpen, setBudgetOpen] = useState(true);
   const budgetButton = useRef<HTMLButtonElement>(null);
   const commandButton = useRef<HTMLButtonElement>(null);
-  const pendingFocus = useRef<() => HTMLElement | null>(undefined);
+  const pendingFocus = useRef<(rows: Row[]) => HTMLElement | null>(undefined);
+  const restorePaletteOrigin = useRef(true);
   const range = customRange ?? monthRange(month);
   const {
     data: metadata,
@@ -169,7 +173,7 @@ function Workspace({
   });
   const load = useTransactionPages(session, range);
   const {data: allRows = []} = useLiveQuery(session.rows);
-  const edits = useEdits(session, allRows);
+  const edits = useEdits(session, allRows, metadata?.currency);
   const postedRows = useMemo(
     () => edits.rows.filter(row => !row.is_pending),
     [edits.rows],
@@ -198,7 +202,13 @@ function Workspace({
   const inlineEditor = editorRow && rowEditor?.kind === 'inline' ? rowEditor : undefined;
   const cellEditor = editorRow && rowEditor?.kind === 'cell' ? rowEditor : undefined;
   const suspended = Boolean(palette) || Boolean(editorRow);
-  const grid = useTransactionGrid(visible, suspended, commandButton, metadata);
+  const grid = useTransactionGrid(
+    visible,
+    suspended,
+    commandButton,
+    metadata,
+    edits.restoringSelection,
+  );
   const {focusedRow, keyboardTargets, selectedRows} = grid;
 
   useLayoutEffect(() => {
@@ -217,8 +227,8 @@ function Workspace({
     }
     const restore = pendingFocus.current;
     pendingFocus.current = undefined;
-    grid.focusTarget(restore());
-  }, [suspended]);
+    grid.focusTarget(restore(visible));
+  }, [suspended, visible]);
   // TODO: Index historical payees per budget and persist the index and sync cursor in IndexedDB.
   const payees = useMemo(
     () => [...new Set(postedRows.map(row => row.payee))].sort(),
@@ -246,6 +256,10 @@ function Workspace({
   }
 
   function open(next: Overlay) {
+    if (!palette) {
+      restorePaletteOrigin.current = true;
+    }
+
     const origin = palette?.origin ?? {
       element:
         document.activeElement instanceof HTMLElement ? document.activeElement : null,
@@ -297,7 +311,8 @@ function Workspace({
     });
   }
 
-  function showEditor(field: Field, rows: Row[]) {
+  function showEditor(field: Field, candidates: Row[]) {
+    const rows = candidates.filter(row => !isGroupPreview(row));
     if (!rows.length) {
       return;
     }
@@ -354,9 +369,34 @@ function Workspace({
           close();
         }
 
-        edits.save(edit);
+        if (edit.group.kind === 'group') {
+          if (palette) {
+            restorePaletteOrigin.current = false;
+          }
+
+          const members = selectedRows.flatMap(row =>
+            row.is_group_parent ? (row.children ?? []).map(child => child.id) : [row.id],
+          );
+          pendingFocus.current = rows =>
+            grid.rowElement(rows.find(row => hasGroupMembers(row, members))?.id) ??
+            restoreFocus();
+        }
+
+        edits.save({
+          ...edit,
+          selection:
+            edit.group.kind === 'group' ? selectedRows.map(selectionKey) : undefined,
+        });
       })
     : [];
+
+  function undo() {
+    const edit = edits.replay('undo');
+    if (edit && 'group' in edit && edit.selection) {
+      grid.restoreSelection(edit.selection);
+    }
+  }
+
   useHotkeys([
     {
       hotkey: shortcuts.commands,
@@ -365,7 +405,7 @@ function Workspace({
     },
     {
       hotkey: shortcuts.undo,
-      callback: () => edits.replay('undo'),
+      callback: undo,
       options: {enabled: edits.canUndo && !suspended},
     },
     {
@@ -519,7 +559,7 @@ function Workspace({
       ? [
           tableCommand('undo', () => {
             close();
-            edits.replay('undo');
+            undo();
           }),
         ]
       : []),
@@ -544,7 +584,7 @@ function Workspace({
         : [];
   }
 
-  const actionRows = commandTargets();
+  const actionRows = commandTargets().filter(row => !isGroupPreview(row));
   const commandItems = readyForEdit
     ? [
         ...transactionCommands(
@@ -889,7 +929,7 @@ function Workspace({
                   : transactionCountLabel(visible.length)}
             </span>
             {edits.canUndo && (
-              <button type="button" onClick={() => edits.replay('undo')}>
+              <button type="button" onClick={undo}>
                 Undo
               </button>
             )}
@@ -970,7 +1010,12 @@ function Workspace({
         )}
       </Popover.Root>
       {modal && overlay && (
-        <Modal title={modal.title} close={close} restore={restoreFocus} back={modal.back}>
+        <Modal
+          title={modal.title}
+          close={close}
+          restore={() => (restorePaletteOrigin.current ? restoreFocus() : false)}
+          back={modal.back}
+        >
           <div
             key={
               overlay.kind === 'facet'

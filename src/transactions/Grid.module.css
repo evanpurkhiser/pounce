@@ -32,7 +32,7 @@
   padding: 0.38rem 0.5rem;
   white-space: nowrap;
 }
-.grid :is(th, td):has(> :is(.cellAction, .sortButton, .gridCheckbox)) {
+.grid :is(th, td):has(> :is(.cellContent, .sortButton, .gridCheckbox)) {
   padding: 0;
 }
 .grid thead {
@@ -105,7 +105,7 @@
 .creditAmount {
   color: var(--positive);
 }
-.cellAction,
+.cellContent,
 .grid [data-editing='true'] :is(input[role='combobox'], textarea) {
   display: block;
   width: 100%;
@@ -129,7 +129,7 @@
 .cellAction:hover {
   text-decoration: underline;
 }
-[data-editor-cell='date'] > .cellAction {
+[data-editor-cell='date'] > .cellContent {
   font-variant-numeric: tabular-nums;
 }
 [data-editor-cell='payee'] {
@@ -214,13 +214,13 @@ td.amount:focus-visible {
 .grid th[aria-sort] .sortIndicator {
   color: var(--focus);
 }
-.cellAction > span {
+.cellContent > span {
   display: block;
   min-block-size: 1lh;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.cellAction > .tagList {
+.cellContent > .tagList {
   display: flex;
   flex-wrap: wrap;
   align-content: center;

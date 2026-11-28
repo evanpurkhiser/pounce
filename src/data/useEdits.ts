@@ -4,7 +4,7 @@ import {toast} from 'sonner';
 
 import type {Row} from './api';
 import {message} from './editChanges';
-import {projectedHistory, projectRows, type EditIssue} from './editQueue';
+import {pendingJobs, projectedHistory, projectRows, type EditIssue} from './editQueue';
 import type {Session} from './session';
 
 function issueMessage(issue: EditIssue): string {
@@ -34,13 +34,17 @@ function issueMessage(issue: EditIssue): string {
   }
 }
 
-export function useEdits({edits}: Session, rows: Row[]) {
+export function useEdits({edits}: Session, rows: Row[], currency?: Row['currency']) {
   const state = useSyncExternalStore(edits.subscribe, edits.getState);
   const {phase, queued, issues} = state;
+  const restoringSelection = pendingJobs(phase, queued).some(
+    ({kind, entry: {edit}}) =>
+      kind === 'undo' && 'group' in edit && Boolean(edit.selection),
+  );
   const history = useMemo(() => projectedHistory(state), [state]);
   const visibleRows = useMemo(
-    () => projectRows(phase, queued, rows),
-    [phase, queued, rows],
+    () => projectRows(phase, queued, rows, currency),
+    [phase, queued, rows, currency],
   );
 
   useEffect(() => {
@@ -76,6 +80,7 @@ export function useEdits({edits}: Session, rows: Row[]) {
 
   return {
     busy: phase.kind !== 'idle',
+    restoringSelection,
     rows: visibleRows,
     issues: issues.map(issueMessage),
     clearIssues: edits.clearIssues,

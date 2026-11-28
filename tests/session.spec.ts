@@ -212,6 +212,81 @@ async function expectSaved(session: Session) {
   expect(state.issues).toEqual([]);
 }
 
+function projectedRows(session: Session) {
+  const {phase, queued} = session.edits.getState();
+  return projectRows(phase, queued, [...session.rows.values()], 'usd');
+}
+
+test('grouping previews the group and an in-flight undo restores its members immediately', async () => {
+  const {source, session, page} = await loadSession();
+  const [first, second] = page.rows;
+  const gate = Promise.withResolvers<void>();
+  const {group} = source;
+  source.group = async input => {
+    await gate.promise;
+    return group(input);
+  };
+
+  session.edits.save({
+    label: 'Grouped transactions',
+    group: {kind: 'group', ids: [first.id, second.id]},
+  });
+  const preview = projectedRows(session);
+  expect(preview.find(row => row.is_group_parent)).toMatchObject({
+    id: -first.id,
+    amount: '14.6700',
+    children: [{id: first.id}, {id: second.id}],
+  });
+  expect(preview.some(row => row.id === first.id)).toBe(false);
+  expect(session.rows.has(first.id)).toBe(true);
+
+  session.edits.replay('undo');
+  expect(projectedRows(session).some(row => row.id === first.id)).toBe(true);
+  gate.resolve();
+  await expectSaved(session);
+  expect([...session.rows.values()].some(row => row.is_group_parent)).toBe(false);
+
+  session.edits.replay('redo');
+  expect(projectedRows(session).find(row => row.is_group_parent)?.id).toBe(-first.id);
+  await expectSaved(session);
+  expect(projectedRows(session).find(row => row.is_group_parent)?.id).toBeGreaterThan(0);
+});
+
+test('ungrouping previews members and restores the group if the request fails', async () => {
+  const {source, session, page, range, signal} = await loadSession();
+  const [first, second] = page.rows;
+  const group = await source.group({
+    ids: [first.id, second.id],
+    date: first.date,
+    payee: first.payee,
+  });
+  const refreshed = await session.loadPage(range, 0, signal);
+  expect(session.applyPages(range, [refreshed])).toBe(true);
+
+  const gate = Promise.withResolvers<void>();
+  source.ungroup = async () => {
+    await gate.promise;
+    throw new Error('Could not ungroup');
+  };
+
+  session.edits.save({
+    label: 'Ungrouped transactions',
+    group: {kind: 'ungroup', ids: [group.id]},
+  });
+  const preview = projectedRows(session);
+  expect(preview.some(row => row.id === group.id)).toBe(false);
+  expect(preview.find(row => row.id === first.id)?.group_parent_id).toBeNull();
+  expect(preview.find(row => row.id === second.id)?.group_parent_id).toBeNull();
+  expect(session.rows.has(group.id)).toBe(true);
+
+  gate.resolve();
+  const failed = await settled(session);
+  expect(failed.issues).toHaveLength(1);
+  const restored = projectedRows(session);
+  expect(restored.some(row => row.id === group.id)).toBe(true);
+  expect(restored.some(row => row.id === first.id)).toBe(false);
+});
+
 test('grouping waits for one batch of transaction reads before starting the next', async () => {
   const {source, session, page} = await loadSession();
   const previous = await source.transactionsPage(
@@ -387,6 +462,10 @@ test('adding a transaction to a group preserves its details and can be replayed'
   session.edits.save({
     label: 'Grouped transactions',
     group: {kind: 'group', ids: [third.id, original.id]},
+  });
+  expect(projectedRows(session).find(row => row.is_group_parent)).toMatchObject({
+    id: -first.id,
+    children: [{id: first.id}, {id: second.id}, {id: third.id}],
   });
   await expectSaved(session);
 
