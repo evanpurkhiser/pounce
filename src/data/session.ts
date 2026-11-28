@@ -161,21 +161,26 @@ export function createSession(source: DataSource) {
       }
     }
 
-    for (const id of ids) {
-      const row = current.get(id);
-      if (row) {
-        mergeConfirmed(row, issues);
-      }
-    }
-    return issues;
+    return [
+      ...issues,
+      ...ids.flatMap(id => {
+        const row = current.get(id);
+        return row ? mergeConfirmed(row) : [];
+      }),
+    ];
   }
 
-  function mergeConfirmed(row: Row, issues: WriteIssue[]) {
+  function cacheWriteIssues(id: number, write: () => void): WriteIssue[] {
     try {
-      mergeRow(row);
+      write();
+      return [];
     } catch (error) {
-      issues.push({kind: 'cacheUpdateFailed', id: row.id, error});
+      return [{kind: 'cacheUpdateFailed', id, error}];
     }
+  }
+
+  function mergeConfirmed(row: Row) {
+    return cacheWriteIssues(row.id, () => mergeRow(row));
   }
 
   async function send(updates: PreparedUpdate[], receipt: WriteReceipt) {
@@ -228,7 +233,7 @@ export function createSession(source: DataSource) {
           }
           receipt.written.push({id, before, after: pickFields(row, saved)});
         }
-        mergeConfirmed(row, receipt.issues);
+        receipt.issues.push(...mergeConfirmed(row));
       }
 
       if (receipt.issues.length) {
@@ -332,22 +337,13 @@ export function createSession(source: DataSource) {
   function persistGroup(edit: GroupEdit, kind: EditKind): Promise<EditResult> {
     return withWrite(async () => {
       const result = await persistGroupEdit(source, edit.group, kind);
-      const issues = [...result.issues];
-      for (const id of result.removedParentIds) {
-        if (!rows.has(id)) {
-          continue;
-        }
-
-        try {
-          rows.delete(id);
-        } catch (error) {
-          issues.push({kind: 'cacheUpdateFailed', id, error});
-        }
-      }
-
-      for (const row of result.rows) {
-        mergeConfirmed(row, issues);
-      }
+      const issues = [
+        ...result.issues,
+        ...result.removedParentIds.flatMap(id =>
+          rows.has(id) ? cacheWriteIssues(id, () => rows.delete(id)) : [],
+        ),
+        ...result.rows.flatMap(mergeConfirmed),
+      ];
 
       return {
         applied: result.applied && {...edit, group: result.applied},
